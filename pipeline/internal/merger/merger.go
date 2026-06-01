@@ -122,6 +122,8 @@ func Merge(conn *sql.DB, overrides []Override) error {
 	}
 	defer stmt.Close()
 
+	slugSeen := make(map[string]string) // slug → company name
+
 	// write OS entities (with or without a KSE match)
 	for _, e := range osList {
 		russiaStatus := "Unknown"
@@ -137,8 +139,17 @@ func Merge(conn *sql.DB, overrides []Override) error {
 			brandsSlice = []string{}
 		}
 
+		id := slugify(e.name)
+		if id == "" {
+			id = e.id
+		}
+		if prev, exists := slugSeen[id]; exists {
+			fmt.Printf("WARN: slug collision %q — %q will overwrite %q\n", id, e.name, prev)
+		}
+		slugSeen[id] = e.name
+
 		if _, err := stmt.Exec(
-			slugify(e.name), e.name, e.aliases,
+			id, e.name, e.aliases,
 			russiaStatus, e.sanctionedUA,
 			nil, nil,
 			marshalJSON(brandsSlice), marshalJSON(sourcesSlice),
@@ -148,14 +159,24 @@ func Merge(conn *sql.DB, overrides []Override) error {
 	}
 
 	// write KSE-only companies (no OS match found)
-	for _, k := range kseOnly {
+	for i, k := range kseOnly {
 		normK := normalize.Company(k.name)
 		brandsSlice := brands[normK]
 		if brandsSlice == nil {
 			brandsSlice = []string{}
 		}
+
+		id := slugify(k.name)
+		if id == "" {
+			id = fmt.Sprintf("kse-%d", i)
+		}
+		if prev, exists := slugSeen[id]; exists {
+			fmt.Printf("WARN: slug collision %q — %q will overwrite %q\n", id, k.name, prev)
+		}
+		slugSeen[id] = k.name
+
 		if _, err := stmt.Exec(
-			slugify(k.name), k.name, "[]",
+			id, k.name, "[]",
 			k.status, 0,
 			nil, nil,
 			marshalJSON(brandsSlice), marshalJSON([]string{"KSE"}),
@@ -218,6 +239,8 @@ func loadBrands(conn *sql.DB) (map[string][]string, error) {
 		return nil, err
 	}
 	defer rows.Close()
+
+	seen := make(map[string]map[string]bool)
 	m := make(map[string][]string)
 	for rows.Next() {
 		var brand, company string
@@ -225,7 +248,13 @@ func loadBrands(conn *sql.DB) (map[string][]string, error) {
 			return nil, err
 		}
 		key := normalize.Company(company)
-		m[key] = append(m[key], brand)
+		if seen[key] == nil {
+			seen[key] = make(map[string]bool)
+		}
+		if !seen[key][brand] {
+			seen[key][brand] = true
+			m[key] = append(m[key], brand)
+		}
 	}
 	return m, rows.Err()
 }
