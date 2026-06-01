@@ -63,6 +63,19 @@ func TestExport(t *testing.T) {
 		t.Errorf("brands = %v, want [Gazprom Neft]", c.Brands)
 	}
 
+	// verify aliases were parsed from JSON
+	if len(c.Aliases) != 1 || c.Aliases[0] != "Газпром" {
+		t.Errorf("aliases = %v, want [Газпром]", c.Aliases)
+	}
+
+	// verify NULL decree and sanction_date produce nil pointers
+	if c.Decree != nil {
+		t.Errorf("decree = %v, want nil", c.Decree)
+	}
+	if c.SanctionDate != nil {
+		t.Errorf("sanction_date = %v, want nil", c.SanctionDate)
+	}
+
 	// verify version.json
 	vData, err := os.ReadFile(filepath.Join(dir, "version.json"))
 	if err != nil {
