@@ -47,28 +47,29 @@ private func datasetGzip(companies: [[String: Any]]) -> Data {
 
 private func gzipCompress(_ input: Data) -> Data {
     var stream = z_stream()
-    _ = input.withUnsafeBytes { ptr -> Int32 in
-        stream.next_in  = UnsafeMutablePointer<Bytef>(mutating: ptr.bindMemory(to: Bytef.self).baseAddress!)
-        stream.avail_in = uInt(input.count)
-        return deflateInit2_(&stream, Z_DEFAULT_COMPRESSION, Z_DEFLATED,
-                             MAX_WBITS + 16, 8, Z_DEFAULT_STRATEGY,
-                             ZLIB_VERSION, Int32(MemoryLayout<z_stream>.size))
-    }
+    let initStatus = deflateInit2_(&stream, Z_DEFAULT_COMPRESSION, Z_DEFLATED,
+                                   MAX_WBITS + 16, 8, Z_DEFAULT_STRATEGY,
+                                   ZLIB_VERSION, Int32(MemoryLayout<z_stream>.size))
+    precondition(initStatus == Z_OK, "deflateInit2_ failed: \(initStatus)")
     defer { deflateEnd(&stream) }
 
-    var output = Data()
-    let chunk  = 65536
-    var buf    = [Bytef](repeating: 0, count: chunk)
-    var status = Z_OK
-    repeat {
-        buf.withUnsafeMutableBufferPointer { ptr in
-            stream.next_out  = ptr.baseAddress!
-            stream.avail_out = uInt(chunk)
-        }
-        status = deflate(&stream, Z_FINISH)
-        output.append(contentsOf: buf.prefix(chunk - Int(stream.avail_out)))
-    } while status == Z_OK
-    return output
+    return input.withUnsafeBytes { src in
+        stream.next_in  = UnsafeMutablePointer<Bytef>(mutating: src.bindMemory(to: Bytef.self).baseAddress!)
+        stream.avail_in = uInt(input.count)
+        var output = Data()
+        let chunk  = 65536
+        var buf    = [Bytef](repeating: 0, count: chunk)
+        var status = Z_OK
+        repeat {
+            buf.withUnsafeMutableBufferPointer { ptr in
+                stream.next_out  = ptr.baseAddress!
+                stream.avail_out = uInt(chunk)
+            }
+            status = deflate(&stream, Z_FINISH)
+            output.append(contentsOf: buf.prefix(chunk - Int(stream.avail_out)))
+        } while status == Z_OK
+        return output
+    }
 }
 
 // @MainActor required: UpdateService is @MainActor
