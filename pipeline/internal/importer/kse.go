@@ -40,11 +40,13 @@ func ImportKSEFromPath(conn *sql.DB, path string) error {
 func parseKSECSV(conn *sql.DB, r io.Reader) error {
 	cr := csv.NewReader(r)
 	cr.FieldsPerRecord = -1
+	cr.LazyQuotes = true
 
 	header, err := cr.Read()
 	if err != nil {
 		return fmt.Errorf("read header: %w", err)
 	}
+	fmt.Printf("KSE CSV headers: %v\n", header)
 	idx := csvIndex(header)
 
 	tx, err := conn.Begin()
