@@ -120,6 +120,9 @@ func newMergeCmd() *cobra.Command {
 
 			var overrides []merger.Override
 			data, err := os.ReadFile(overridesPath)
+			if err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("read overrides %s: %w", overridesPath, err)
+			}
 			if err == nil {
 				if err := json.Unmarshal(data, &overrides); err != nil {
 					return fmt.Errorf("parse overrides %s: %w", overridesPath, err)
