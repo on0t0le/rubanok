@@ -1,0 +1,8 @@
+# pipeline binary
+pipeline/pipeline
+
+# SQLite database (ephemeral, created during pipeline run)
+pipeline.db
+
+# pipeline output (published to gh-pages branch, not committed to main)
+output/

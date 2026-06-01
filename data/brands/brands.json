@@ -1,0 +1,12 @@
+[
+  {"brand": "Oreo", "owner": "Mondelez International"},
+  {"brand": "Milka", "owner": "Mondelez International"},
+  {"brand": "Toblerone", "owner": "Mondelez International"},
+  {"brand": "Nescafe", "owner": "Nestle"},
+  {"brand": "KitKat", "owner": "Nestle"},
+  {"brand": "Maggi", "owner": "Nestle"},
+  {"brand": "Lipton", "owner": "Unilever"},
+  {"brand": "Dove", "owner": "Unilever"},
+  {"brand": "Gillette", "owner": "Procter & Gamble"},
+  {"brand": "Pampers", "owner": "Procter & Gamble"}
+]
