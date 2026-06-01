@@ -36,6 +36,8 @@ func TestNormalizeKSEStatus(t *testing.T) {
 		{"Operating", "Operating"},
 		{"continues", "Operating"},
 		{"Reduced Operations", "Reduced Operations"},
+		{"paused", "Suspended"},
+		{"reduced", "Reduced Operations"},
 		{"whatever", "Unknown"},
 	}
 	for _, c := range cases {
