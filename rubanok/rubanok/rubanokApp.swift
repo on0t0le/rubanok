@@ -9,9 +9,15 @@ import SwiftUI
 
 @main
 struct rubanokApp: App {
+    @State private var updateDone = false
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            if updateDone {
+                ContentView()
+            } else {
+                UpdateView(onDone: { updateDone = true })
+            }
         }
     }
 }

@@ -126,6 +126,7 @@ final class DatabaseManager {
 extension DatabaseManager {
     static let shared: DatabaseManager = {
         let dir  = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true, attributes: nil)
         let path = dir.appendingPathComponent("brandcheck.sqlite").path
         guard let instance = try? DatabaseManager(path: path) else {
             fatalError("Cannot open SQLite database at \(path)")
