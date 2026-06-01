@@ -4,6 +4,7 @@ import (
 	"compress/gzip"
 	"database/sql"
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -33,7 +34,7 @@ func ImportOpenSanctions(conn *sql.DB) error {
 func ImportOpenSanctionsFromPath(conn *sql.DB, path string) error {
 	f, err := os.Open(path)
 	if err != nil {
-		return err
+		return fmt.Errorf("open %s: %w", path, err)
 	}
 	defer f.Close()
 
@@ -41,7 +42,7 @@ func ImportOpenSanctionsFromPath(conn *sql.DB, path string) error {
 	if strings.HasSuffix(path, ".gz") {
 		gr, err := gzip.NewReader(f)
 		if err != nil {
-			return err
+			return fmt.Errorf("gzip %s: %w", path, err)
 		}
 		defer gr.Close()
 		r = gr
@@ -124,24 +125,13 @@ func pipesToJSON(s string) string {
 	}
 	var items []string
 	for _, p := range strings.Split(s, "|") {
-		p = strings.TrimSpace(p)
-		if p != "" {
+		if p = strings.TrimSpace(p); p != "" {
 			items = append(items, p)
 		}
 	}
 	if len(items) == 0 {
 		return "[]"
 	}
-	var b strings.Builder
-	b.WriteString("[")
-	for i, item := range items {
-		if i > 0 {
-			b.WriteString(",")
-		}
-		b.WriteString(`"`)
-		b.WriteString(strings.ReplaceAll(item, `"`, `\"`))
-		b.WriteString(`"`)
-	}
-	b.WriteString("]")
-	return b.String()
+	b, _ := json.Marshal(items) // never errors for []string
+	return string(b)
 }
