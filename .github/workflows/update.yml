@@ -1,0 +1,49 @@
+name: Update Dataset
+
+on:
+  schedule:
+    - cron: "0 2 * * *"   # 2:00 AM UTC daily
+  workflow_dispatch:        # allow manual trigger from GitHub UI
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write       # needed to push to gh-pages branch
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: true
+          cache-dependency-path: pipeline/go.sum
+
+      - name: Build pipeline binary
+        run: go build -o pipeline ./pipeline/cmd/pipeline
+
+      - name: Import OpenSanctions (UA NSDC)
+        run: ./pipeline import opensanctions
+
+      - name: Import KSE Leave Russia
+        run: ./pipeline import kse
+
+      - name: Import brands (local JSON + Open Food Facts)
+        run: ./pipeline import brands --brands data/brands/brands.json
+
+      - name: Merge entities
+        run: ./pipeline merge --overrides data/overrides.json
+
+      - name: Export dataset
+        run: ./pipeline export --output output
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./output
+          publish_branch: gh-pages
+          force_orphan: true    # keep gh-pages branch lean (no history)
