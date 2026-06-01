@@ -1,0 +1,4 @@
+id,caption,schema,name,aliases,birth_date,countries,addresses,identifiers,sanctions,phones,emails,datasets
+NK-abc123,Gazprom,Company,Gazprom,ПАТ Газпром|Gazprom PJSC,,ru,,,,,ua_nsdc
+NK-def456,Sberbank,Company,Sberbank,Sberbank of Russia,,ru,,,,,ua_nsdc
+NK-ghi789,Lukoil,Company,Lukoil,ПАО Лукойл,,ru,,,,,ua_nsdc
