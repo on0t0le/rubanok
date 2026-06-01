@@ -12,10 +12,7 @@ import (
 	"strings"
 )
 
-// openSanctionsURL is the UA NSDC sanctions list from OpenSanctions (free tier).
-// ⚠️ Confirm this URL is freely accessible before running in production.
-// See: https://www.opensanctions.org/docs/bulk/
-const openSanctionsURL = "https://data.opensanctions.org/datasets/latest/ua_nsdc/targets.simple.csv"
+const openSanctionsURL = "https://data.opensanctions.org/datasets/latest/ua_nsdc_sanctions/targets.simple.csv"
 
 // ImportOpenSanctions downloads the OpenSanctions UA NSDC dataset and imports it.
 func ImportOpenSanctions(conn *sql.DB) error {
