@@ -23,7 +23,7 @@ jobs:
           cache-dependency-path: pipeline/go.sum
 
       - name: Build pipeline binary
-        run: go build -o pipeline ./pipeline/cmd/pipeline
+        run: cd pipeline && go build -o ../pipeline ./cmd/pipeline
 
       - name: Import OpenSanctions (UA NSDC)
         run: ./pipeline import opensanctions
