@@ -24,7 +24,7 @@ func TestCompany(t *testing.T) {
 func TestTokenSortRatio(t *testing.T) {
 	cases := []struct {
 		a, b string
-		min  int
+		want int
 	}{
 		{"mondelez", "mondelez", 100},
 		{"mondelez international", "international mondelez", 100},
@@ -32,8 +32,8 @@ func TestTokenSortRatio(t *testing.T) {
 	}
 	for _, c := range cases {
 		got := TokenSortRatio(c.a, c.b)
-		if got < c.min {
-			t.Errorf("TokenSortRatio(%q, %q) = %d, want >= %d", c.a, c.b, got, c.min)
+		if got != c.want {
+			t.Errorf("TokenSortRatio(%q, %q) = %d, want %d", c.a, c.b, got, c.want)
 		}
 	}
 }
