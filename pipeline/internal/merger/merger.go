@@ -73,6 +73,7 @@ func Merge(conn *sql.DB, overrides []Override) error {
 			if e, found := osNormIndex[targetNorm]; found {
 				kseMatched[e.normName] = k
 			} else {
+				fmt.Printf("WARN: override target for KSE %q not found in OpenSanctions data\n", k.name)
 				kseOnly = append(kseOnly, k)
 			}
 			continue
@@ -91,6 +92,10 @@ func Merge(conn *sql.DB, overrides []Override) error {
 
 		switch {
 		case bestScore >= 85 && bestEntity != nil:
+			if prev, exists := kseMatched[bestEntity.normName]; exists {
+				fmt.Printf("WARN: KSE collision on OS %q — %q overwrites %q\n",
+					bestEntity.name, k.name, prev.name)
+			}
 			kseMatched[bestEntity.normName] = k
 		case bestScore >= 60 && bestEntity != nil:
 			fmt.Printf("REVIEW: KSE %q ↔ OS %q (score %d, below threshold)\n",
@@ -228,14 +233,14 @@ func loadBrands(conn *sql.DB) (map[string][]string, error) {
 func slugify(s string) string {
 	s = strings.ToLower(s)
 	var b strings.Builder
+	lastWasSep := false
 	for _, r := range s {
 		if unicode.IsLetter(r) || unicode.IsDigit(r) {
 			b.WriteRune(r)
-		} else if b.Len() > 0 {
-			chars := []rune(b.String())
-			if chars[len(chars)-1] != '-' {
-				b.WriteRune('-')
-			}
+			lastWasSep = false
+		} else if !lastWasSep && b.Len() > 0 {
+			b.WriteRune('-')
+			lastWasSep = true
 		}
 	}
 	return strings.Trim(b.String(), "-")
