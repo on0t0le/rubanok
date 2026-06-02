@@ -82,21 +82,15 @@ func newImportKSECmd() *cobra.Command {
 }
 
 func newImportBrandsCmd() *cobra.Command {
-	var brandsPath string
-	cmd := &cobra.Command{
+	return &cobra.Command{
 		Use:   "brands",
-		Short: "Import brand→company mappings from local JSON, Wikidata, and Open Food Facts",
+		Short: "Import brand→company mappings from Wikidata and Open Food Facts",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			conn, err := openDB()
 			if err != nil {
 				return err
 			}
 			defer conn.Close()
-
-			fmt.Printf("importing brands from %s...\n", brandsPath)
-			if err := importer.ImportBrandsFromJSONPath(conn, brandsPath); err != nil {
-				return fmt.Errorf("local brands: %w", err)
-			}
 
 			fmt.Println("importing brands from Wikidata...")
 			if err := importer.ImportBrandsFromWikidata(conn); err != nil {
@@ -107,8 +101,6 @@ func newImportBrandsCmd() *cobra.Command {
 			return importer.ImportBrandsFromOpenFoodFacts(conn)
 		},
 	}
-	cmd.Flags().StringVar(&brandsPath, "brands", "data/brands/brands.json", "path to local brands JSON file")
-	return cmd
 }
 
 func newMergeCmd() *cobra.Command {

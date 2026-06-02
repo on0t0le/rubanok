@@ -31,11 +31,11 @@ jobs:
       - name: Import KSE Leave Russia
         run: ./pipeline-bin import kse
 
-      - name: Import brands (local JSON + Open Food Facts)
-        run: ./pipeline-bin import brands --brands data/brands/brands.json
+      - name: Import brands (Wikidata + Open Food Facts)
+        run: ./pipeline-bin import brands
 
       - name: Merge entities
-        run: ./pipeline-bin merge --overrides data/overrides.json
+        run: ./pipeline-bin merge --overrides data/overrides.json --excludes data/exclude.json
 
       - name: Export dataset
         run: ./pipeline-bin export --output output
