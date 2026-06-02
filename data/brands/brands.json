@@ -16,5 +16,10 @@
   {"brand": "Pampers", "owner": "Procter & Gamble"},
   {"brand": "Old Spice", "owner": "Procter & Gamble"},
   {"brand": "Ariel", "owner": "Procter & Gamble"},
-  {"brand": "Tide", "owner": "Procter & Gamble"}
+  {"brand": "Tide", "owner": "Procter & Gamble"},
+  {"brand": "Jameson", "owner": "Pernod Ricard"},
+  {"brand": "Absolut", "owner": "Pernod Ricard"},
+  {"brand": "Ballantine's", "owner": "Pernod Ricard"},
+  {"brand": "Chivas Regal", "owner": "Pernod Ricard"},
+  {"brand": "Malibu", "owner": "Pernod Ricard"}
 ]
