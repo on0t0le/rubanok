@@ -8,6 +8,13 @@ enum DBError: Error {
     case stepFailed(String)
 }
 
+struct CompanyResult {
+    let matchedBrand: String?
+    let companyName: String
+    let russiaStatus: String?
+    let sanctionedUA: Bool
+}
+
 final class DatabaseManager {
     private var db: OpaquePointer?
     private let sqliteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
@@ -88,6 +95,52 @@ final class DatabaseManager {
         }
         defer { sqlite3_finalize(stmt) }
         return sqlite3_step(stmt) == SQLITE_ROW ? Int(sqlite3_column_int(stmt, 0)) : 0
+    }
+
+    func search(query: String) throws -> [CompanyResult] {
+        guard !query.isEmpty else { return [] }
+        let pattern = "%\(query)%"
+        let sql = """
+            SELECT name, russia_status, sanctioned_ua, brands_json
+            FROM companies
+            WHERE name LIKE ? OR brands_json LIKE ?
+            LIMIT 50
+        """
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            throw DBError.prepareFailed(errMsg())
+        }
+        defer { sqlite3_finalize(stmt) }
+
+        bindText(stmt, 1, pattern)
+        bindText(stmt, 2, pattern)
+
+        var results: [CompanyResult] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            let name       = String(cString: sqlite3_column_text(stmt, 0))
+            let status     = sqlite3_column_type(stmt, 1) != SQLITE_NULL
+                             ? String(cString: sqlite3_column_text(stmt, 1)) : nil
+            let sanctioned = sqlite3_column_int(stmt, 2) != 0
+            let brandsJSON = sqlite3_column_type(stmt, 3) != SQLITE_NULL
+                             ? String(cString: sqlite3_column_text(stmt, 3)) : nil
+
+            let brand = resolveMatchedBrand(brandsJSON: brandsJSON, query: query)
+            results.append(CompanyResult(
+                matchedBrand: brand,
+                companyName: name,
+                russiaStatus: status,
+                sanctionedUA: sanctioned
+            ))
+        }
+        return results
+    }
+
+    private func resolveMatchedBrand(brandsJSON: String?, query: String) -> String? {
+        guard let json = brandsJSON,
+              let data = json.data(using: .utf8),
+              let brands = try? JSONSerialization.jsonObject(with: data) as? [String]
+        else { return nil }
+        return brands.first { $0.localizedCaseInsensitiveContains(query) }
     }
 
     // MARK: - Private helpers
