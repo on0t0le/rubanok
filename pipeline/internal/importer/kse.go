@@ -12,11 +12,13 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
+var yaleClient = &http.Client{Timeout: 30 * time.Second}
+
 const yaleURL = "https://som.yale.edu/story/2022/over-1000-companies-have-curtailed-operations-russia-some-remain"
 
 // ImportKSE downloads the Yale SOM Leave Russia tracker and imports it.
 func ImportKSE(conn *sql.DB) error {
-	resp, err := http.Get(yaleURL)
+	resp, err := yaleClient.Get(yaleURL)
 	if err != nil {
 		return fmt.Errorf("download yale: %w", err)
 	}
