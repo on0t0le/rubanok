@@ -111,7 +111,7 @@ func mapYaleStatus(action string) string {
 			return "Suspended"
 		}
 	}
-	for _, kw := range []string{"reduc", "limit", "curtail", "scale back", "wind down", "partial"} {
+	for _, kw := range []string{"reduc", "limit", "curtail", "scal", "wind down", "partial"} {
 		if strings.Contains(lower, kw) {
 			return "Reduced Operations"
 		}
