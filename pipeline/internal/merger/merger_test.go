@@ -144,6 +144,60 @@ func TestResolveBrands_NoMatchBelowThreshold(t *testing.T) {
 	}
 }
 
+func TestIsConsumer(t *testing.T) {
+	cases := []struct {
+		industry string
+		want     bool
+	}{
+		{"", true},
+		{"Consumer Staples", true},
+		{"Consumer Discretionary", true},
+		{"Financials", false},
+		{"Energy", false},
+		{"Industrials", false},
+		{"Information Technology", false},
+		{"Utilities", false},
+	}
+	for _, c := range cases {
+		got := isConsumer(c.industry)
+		if got != c.want {
+			t.Errorf("isConsumer(%q) = %v, want %v", c.industry, got, c.want)
+		}
+	}
+}
+
+func TestMerge_IndustryFilter(t *testing.T) {
+	conn := tempDB(t)
+
+	// Financials company — must be filtered out
+	mustExec(t, conn, `INSERT INTO raw_kse (company_name, status, industry)
+		VALUES ('Sberbank', 'Operating', 'Financials')`)
+
+	// Consumer Staples company — must pass through
+	mustExec(t, conn, `INSERT INTO raw_kse (company_name, status, industry)
+		VALUES ('Nestlé', 'Reduced Operations', 'Consumer Staples')`)
+
+	if err := Merge(conn, nil); err != nil {
+		t.Fatalf("Merge: %v", err)
+	}
+
+	var sberbankCount int
+	if err := conn.QueryRow(`SELECT COUNT(*) FROM companies WHERE name = 'Sberbank'`).Scan(&sberbankCount); err != nil {
+		t.Fatal(err)
+	}
+	if sberbankCount != 0 {
+		t.Errorf("Sberbank (Financials) should be filtered, got %d rows", sberbankCount)
+	}
+
+	var nestleCount int
+	if err := conn.QueryRow(`SELECT COUNT(*) FROM companies WHERE name = 'Nestlé'`).Scan(&nestleCount); err != nil {
+		t.Fatal(err)
+	}
+	if nestleCount != 1 {
+		t.Errorf("Nestlé (Consumer Staples) should appear in companies, got %d rows", nestleCount)
+	}
+}
+
 func contains(s []string, v string) bool {
 	for _, x := range s {
 		if x == v {

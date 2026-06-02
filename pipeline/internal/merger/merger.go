@@ -29,7 +29,20 @@ type osEntity struct {
 type kseRow struct {
 	name        string
 	status      string
+	industry    string
 	lastUpdated string
+}
+
+var consumerIndustries = map[string]bool{
+	"Consumer Staples":        true,
+	"Consumer Discretionary":  true,
+}
+
+func isConsumer(industry string) bool {
+	if industry == "" {
+		return true
+	}
+	return consumerIndustries[industry]
 }
 
 type brandPair struct {
@@ -289,7 +302,7 @@ func loadOpenSanctions(conn *sql.DB) ([]osEntity, error) {
 
 func loadKSE(conn *sql.DB) ([]kseRow, error) {
 	rows, err := conn.Query(`
-		SELECT company_name, COALESCE(status, 'Unknown'), COALESCE(last_updated, '')
+		SELECT company_name, COALESCE(status, 'Unknown'), COALESCE(industry, ''), COALESCE(last_updated, '')
 		FROM raw_kse
 	`)
 	if err != nil {
@@ -299,10 +312,12 @@ func loadKSE(conn *sql.DB) ([]kseRow, error) {
 	var result []kseRow
 	for rows.Next() {
 		var k kseRow
-		if err := rows.Scan(&k.name, &k.status, &k.lastUpdated); err != nil {
+		if err := rows.Scan(&k.name, &k.status, &k.industry, &k.lastUpdated); err != nil {
 			return nil, err
 		}
-		result = append(result, k)
+		if isConsumer(k.industry) {
+			result = append(result, k)
+		}
 	}
 	return result, rows.Err()
 }
