@@ -85,7 +85,7 @@ func newImportBrandsCmd() *cobra.Command {
 	var brandsPath string
 	cmd := &cobra.Command{
 		Use:   "brands",
-		Short: "Import brand→company mappings from local JSON and Open Food Facts",
+		Short: "Import brand→company mappings from local JSON, Wikidata, and Open Food Facts",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			conn, err := openDB()
 			if err != nil {
@@ -96,6 +96,11 @@ func newImportBrandsCmd() *cobra.Command {
 			fmt.Printf("importing brands from %s...\n", brandsPath)
 			if err := importer.ImportBrandsFromJSONPath(conn, brandsPath); err != nil {
 				return fmt.Errorf("local brands: %w", err)
+			}
+
+			fmt.Println("importing brands from Wikidata...")
+			if err := importer.ImportBrandsFromWikidata(conn); err != nil {
+				fmt.Printf("WARN: wikidata: %v\n", err)
 			}
 
 			fmt.Println("importing brands from Open Food Facts (this may take several minutes)...")
