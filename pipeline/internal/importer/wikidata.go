@@ -1,6 +1,7 @@
 package importer
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -17,7 +18,8 @@ var wikidataEndpoint = "https://query.wikidata.org/sparql"
 
 const wikidataSPARQL = `
 SELECT DISTINCT ?brandLabel ?ownerLabel WHERE {
-  ?brand wdt:P127 ?owner .
+  ?brand wdt:P31 wd:Q1331049 ;
+         wdt:P127 ?owner .
   SERVICE wikibase:label { bd:serviceParam wikibase:language "en" }
 }
 LIMIT 50000
@@ -126,7 +128,14 @@ func queryWikidata(client *http.Client) ([]wikidataBrand, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
-	return parseWikidataJSON(io.LimitReader(resp.Body, 64<<20))
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
+	if err != nil {
+		return nil, fmt.Errorf("read: %w", err)
+	}
+	// Wikidata may return literal newlines inside JSON string values (invalid JSON);
+	// replace them with spaces before parsing.
+	raw = bytes.ReplaceAll(raw, []byte("\n"), []byte(" "))
+	return parseWikidataJSON(bytes.NewReader(raw))
 }
 
 func parseWikidataJSON(r io.Reader) ([]wikidataBrand, error) {
