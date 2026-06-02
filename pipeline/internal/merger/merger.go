@@ -32,6 +32,11 @@ type kseRow struct {
 	lastUpdated string
 }
 
+type brandPair struct {
+	brand string
+	owner string
+}
+
 // Merge reads raw tables, fuzzy-matches entities, writes to companies table.
 // overrides may be nil.
 func Merge(conn *sql.DB, overrides []Override) error {
@@ -43,10 +48,20 @@ func Merge(conn *sql.DB, overrides []Override) error {
 	if err != nil {
 		return fmt.Errorf("load kse: %w", err)
 	}
-	brands, err := loadBrands(conn)
+	brandPairs, err := loadBrands(conn)
 	if err != nil {
 		return fmt.Errorf("load brands: %w", err)
 	}
+
+	// Collect all company norm names (OS + KSE) for fuzzy brand resolution.
+	allNorms := make([]string, 0, len(osList)+len(kseList))
+	for _, e := range osList {
+		allNorms = append(allNorms, e.normName)
+	}
+	for _, k := range kseList {
+		allNorms = append(allNorms, normalize.Company(k.name))
+	}
+	brands := resolveBrands(brandPairs, allNorms)
 
 	// build override map: normalized KSE name → normalized OS name
 	overrideMap := make(map[string]string, len(overrides))
@@ -188,6 +203,66 @@ func Merge(conn *sql.DB, overrides []Override) error {
 	return tx.Commit()
 }
 
+// resolveBrands fuzzy-matches brand owner names to company normalized names
+// and returns a map of companyNorm → []brand suitable for the merger lookup.
+// Owners that normalize to "" or score below 70 are skipped.
+func resolveBrands(pairs []brandPair, companyNorms []string) map[string][]string {
+	normSet := make(map[string]bool, len(companyNorms))
+	for _, n := range companyNorms {
+		normSet[n] = true
+	}
+
+	ownerToCompany := make(map[string]string)
+	for _, p := range pairs {
+		normOwner := normalize.Company(p.owner)
+		if normOwner == "" {
+			continue
+		}
+		if _, already := ownerToCompany[normOwner]; already {
+			continue
+		}
+		if normSet[normOwner] {
+			ownerToCompany[normOwner] = normOwner
+			continue
+		}
+		bestScore := 0
+		bestNorm := ""
+		for _, cn := range companyNorms {
+			score := normalize.TokenSortRatio(normOwner, cn)
+			if score > bestScore {
+				bestScore = score
+				bestNorm = cn
+			}
+		}
+		if bestScore >= 70 {
+			ownerToCompany[normOwner] = bestNorm
+		} else {
+			fmt.Printf("WARN: no brand owner match for %q (best score %d)\n", p.owner, bestScore)
+		}
+	}
+
+	seen := make(map[string]map[string]bool)
+	result := make(map[string][]string)
+	for _, p := range pairs {
+		normOwner := normalize.Company(p.owner)
+		if normOwner == "" {
+			continue
+		}
+		companyNorm, ok := ownerToCompany[normOwner]
+		if !ok {
+			continue
+		}
+		if seen[companyNorm] == nil {
+			seen[companyNorm] = make(map[string]bool)
+		}
+		if !seen[companyNorm][p.brand] {
+			seen[companyNorm][p.brand] = true
+			result[companyNorm] = append(result[companyNorm], p.brand)
+		}
+	}
+	return result
+}
+
 func loadOpenSanctions(conn *sql.DB) ([]osEntity, error) {
 	rows, err := conn.Query(`
 		SELECT id, name,
@@ -232,31 +307,22 @@ func loadKSE(conn *sql.DB) ([]kseRow, error) {
 	return result, rows.Err()
 }
 
-// loadBrands returns normalized company name → []brand names
-func loadBrands(conn *sql.DB) (map[string][]string, error) {
+// loadBrands returns all raw brand→owner pairs from raw_brands.
+func loadBrands(conn *sql.DB) ([]brandPair, error) {
 	rows, err := conn.Query(`SELECT brand_name, company_name FROM raw_brands`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-
-	seen := make(map[string]map[string]bool)
-	m := make(map[string][]string)
+	var result []brandPair
 	for rows.Next() {
-		var brand, company string
-		if err := rows.Scan(&brand, &company); err != nil {
+		var bp brandPair
+		if err := rows.Scan(&bp.brand, &bp.owner); err != nil {
 			return nil, err
 		}
-		key := normalize.Company(company)
-		if seen[key] == nil {
-			seen[key] = make(map[string]bool)
-		}
-		if !seen[key][brand] {
-			seen[key][brand] = true
-			m[key] = append(m[key], brand)
-		}
+		result = append(result, bp)
 	}
-	return m, rows.Err()
+	return result, rows.Err()
 }
 
 func slugify(s string) string {

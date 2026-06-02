@@ -104,6 +104,46 @@ func TestMerge_KSEOnly(t *testing.T) {
 	}
 }
 
+func TestResolveBrands_ExactMatch(t *testing.T) {
+	pairs := []brandPair{{brand: "KitKat", owner: "Nestle"}}
+	got := resolveBrands(pairs, []string{"nestle"})
+	brands, ok := got["nestle"]
+	if !ok {
+		t.Fatal("expected brand assigned to 'nestle', got nothing")
+	}
+	if !contains(brands, "KitKat") {
+		t.Errorf("brands = %v, want KitKat", brands)
+	}
+}
+
+func TestResolveBrands_FuzzyMatch(t *testing.T) {
+	pairs := []brandPair{{brand: "Gillette", owner: "Procter and Gamble"}}
+	got := resolveBrands(pairs, []string{"procter gamble"})
+	brands, ok := got["procter gamble"]
+	if !ok {
+		t.Fatal("expected brand assigned via fuzzy match to 'procter gamble', got nothing")
+	}
+	if !contains(brands, "Gillette") {
+		t.Errorf("brands = %v, want Gillette", brands)
+	}
+}
+
+func TestResolveBrands_EmptyOwnerSkipped(t *testing.T) {
+	pairs := []brandPair{{brand: "Pampers", owner: "P&G"}}
+	got := resolveBrands(pairs, []string{"procter gamble"})
+	if len(got) != 0 {
+		t.Errorf("expected no brands assigned for empty owner, got %v", got)
+	}
+}
+
+func TestResolveBrands_NoMatchBelowThreshold(t *testing.T) {
+	pairs := []brandPair{{brand: "SomeBrand", owner: "xyz corp"}}
+	got := resolveBrands(pairs, []string{"unrelated company"})
+	if len(got) != 0 {
+		t.Errorf("expected no brands assigned below threshold, got %v", got)
+	}
+}
+
 func contains(s []string, v string) bool {
 	for _, x := range s {
 		if x == v {
