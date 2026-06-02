@@ -21,5 +21,8 @@
   {"brand": "Absolut", "owner": "Pernod Ricard"},
   {"brand": "Ballantine's", "owner": "Pernod Ricard"},
   {"brand": "Chivas Regal", "owner": "Pernod Ricard"},
-  {"brand": "Malibu", "owner": "Pernod Ricard"}
+  {"brand": "Malibu", "owner": "Pernod Ricard"},
+  {"brand": "Martini", "owner": "Bacardi"},
+  {"brand": "Martini & Rossi", "owner": "Bacardi"},
+  {"brand": "Bacardi", "owner": "Bacardi"}
 ]

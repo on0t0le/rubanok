@@ -51,8 +51,8 @@ type brandPair struct {
 }
 
 // Merge reads raw tables, fuzzy-matches entities, writes to companies table.
-// overrides may be nil.
-func Merge(conn *sql.DB, overrides []Override) error {
+// overrides and excludes may be nil.
+func Merge(conn *sql.DB, overrides []Override, excludes []string) error {
 	osList, err := loadOpenSanctions(conn)
 	if err != nil {
 		return fmt.Errorf("load opensanctions: %w", err)
@@ -75,6 +75,12 @@ func Merge(conn *sql.DB, overrides []Override) error {
 		allNorms = append(allNorms, normalize.Company(k.name))
 	}
 	brands := resolveBrands(brandPairs, allNorms)
+
+	// build exclude set: exact company name → skip
+	excludeSet := make(map[string]bool, len(excludes))
+	for _, name := range excludes {
+		excludeSet[name] = true
+	}
 
 	// build override map: normalized KSE name → normalized OS name
 	overrideMap := make(map[string]string, len(overrides))
@@ -154,6 +160,9 @@ func Merge(conn *sql.DB, overrides []Override) error {
 
 	// write OS entities (with or without a KSE match)
 	for _, e := range osList {
+		if excludeSet[e.name] {
+			continue
+		}
 		russiaStatus := "Unknown"
 		sourcesSlice := []string{"OpenSanctions"}
 
@@ -188,6 +197,9 @@ func Merge(conn *sql.DB, overrides []Override) error {
 
 	// write KSE-only companies (no OS match found)
 	for i, k := range kseOnly {
+		if excludeSet[k.name] {
+			continue
+		}
 		normK := normalize.Company(k.name)
 		brandsSlice := brands[normK]
 		if brandsSlice == nil {
