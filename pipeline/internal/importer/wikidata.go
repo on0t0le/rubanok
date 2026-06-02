@@ -125,6 +125,11 @@ func queryWikidata(client *http.Client) ([]wikidataBrand, error) {
 		return nil, fmt.Errorf("http: %w", err)
 	}
 	defer resp.Body.Close()
+	fmt.Printf("DEBUG wikidata: status=%d content-type=%q x-cache=%q\n",
+		resp.StatusCode,
+		resp.Header.Get("Content-Type"),
+		resp.Header.Get("X-Cache"),
+	)
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
@@ -132,10 +137,16 @@ func queryWikidata(client *http.Client) ([]wikidataBrand, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read: %w", err)
 	}
+	fmt.Printf("DEBUG wikidata: body_bytes=%d body_preview=%.500s\n", len(raw), raw)
 	// Wikidata may return literal newlines inside JSON string values (invalid JSON);
 	// replace them with spaces before parsing.
 	raw = bytes.ReplaceAll(raw, []byte("\n"), []byte(" "))
-	return parseWikidataJSON(bytes.NewReader(raw))
+	brands, err := parseWikidataJSON(bytes.NewReader(raw))
+	if err != nil {
+		return nil, err
+	}
+	fmt.Printf("DEBUG wikidata: parsed_brands=%d\n", len(brands))
+	return brands, nil
 }
 
 func parseWikidataJSON(r io.Reader) ([]wikidataBrand, error) {
