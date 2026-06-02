@@ -90,3 +90,61 @@ func TestParseWikidataJSON(t *testing.T) {
 		t.Errorf("brand = %q, want Oreo", brands[0].Brand)
 	}
 }
+
+func TestFetchPersonNames(t *testing.T) {
+	fixture := `{"results":{"bindings":[
+		{"name":{"type":"literal","xml:lang":"en","value":"Jamie Oliver"}}
+	]}}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/sparql-results+json")
+		w.Write([]byte(fixture))
+	}))
+	defer srv.Close()
+
+	old := wikidataEndpoint
+	wikidataEndpoint = srv.URL
+	defer func() { wikidataEndpoint = old }()
+
+	result, err := FetchPersonNames([]string{"Jamie Oliver", "PepsiCo"})
+	if err != nil {
+		t.Fatalf("FetchPersonNames: %v", err)
+	}
+	if !result["Jamie Oliver"] {
+		t.Error("expected Jamie Oliver to be detected as person")
+	}
+	if result["PepsiCo"] {
+		t.Error("PepsiCo should not be detected as person")
+	}
+	if len(result) != 1 {
+		t.Errorf("got %d persons, want 1", len(result))
+	}
+}
+
+func TestFetchPersonNames_Empty(t *testing.T) {
+	result, err := FetchPersonNames([]string{})
+	if err != nil {
+		t.Fatalf("FetchPersonNames: %v", err)
+	}
+	if len(result) != 0 {
+		t.Errorf("got %d results for empty input, want 0", len(result))
+	}
+}
+
+func TestFetchPersonNames_NetworkError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	old := wikidataEndpoint
+	wikidataEndpoint = srv.URL
+	defer func() { wikidataEndpoint = old }()
+
+	result, err := FetchPersonNames([]string{"Jamie Oliver"})
+	if err == nil {
+		t.Error("expected error for HTTP 500, got nil")
+	}
+	if len(result) != 0 {
+		t.Errorf("got %d results on error, want 0", len(result))
+	}
+}

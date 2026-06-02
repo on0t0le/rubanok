@@ -40,6 +40,65 @@ type wikidataResponse struct {
 	} `json:"results"`
 }
 
+type personQueryResponse struct {
+	Results struct {
+		Bindings []struct {
+			Name struct{ Value string } `json:"name"`
+		} `json:"bindings"`
+	} `json:"results"`
+}
+
+// FetchPersonNames queries Wikidata and returns the subset of names that are
+// instances of human (Q5). Returns empty map on empty input or error.
+func FetchPersonNames(names []string) (map[string]bool, error) {
+	if len(names) == 0 {
+		return map[string]bool{}, nil
+	}
+
+	var sb strings.Builder
+	for _, name := range names {
+		sb.WriteString(`"`)
+		sb.WriteString(strings.ReplaceAll(name, `"`, `\"`))
+		sb.WriteString(`"@en `)
+	}
+	sparql := fmt.Sprintf(`SELECT DISTINCT ?name WHERE {
+  VALUES ?name { %s }
+  ?item rdfs:label ?name ;
+        wdt:P31 wd:Q5 .
+}`, sb.String())
+
+	body := url.Values{"query": {sparql}}.Encode()
+	req, err := http.NewRequest("POST", wikidataEndpoint, strings.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/sparql-results+json")
+	req.Header.Set("User-Agent", "BrandCheckUA/1.0 (https://github.com/on0t0le/rubanok)")
+
+	resp, err := wikidataClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("http: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+
+	var pr personQueryResponse
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 16<<20)).Decode(&pr); err != nil {
+		return nil, fmt.Errorf("decode: %w", err)
+	}
+
+	result := make(map[string]bool)
+	for _, b := range pr.Results.Bindings {
+		if b.Name.Value != "" {
+			result[b.Name.Value] = true
+		}
+	}
+	return result, nil
+}
+
 // ImportBrandsFromWikidata fetches brand→company pairs from the Wikidata
 // SPARQL endpoint and inserts them into raw_brands with source "wikidata".
 func ImportBrandsFromWikidata(conn *sql.DB) error {
