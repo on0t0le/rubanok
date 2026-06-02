@@ -11,14 +11,25 @@ struct ContentView: View {
                 .padding(.top)
 
             if query.isEmpty {
-                emptyPrompt
+                ScrollView {
+                    emptyPrompt
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 80)
+                }
+                .refreshable { await refresh() }
             } else if results.isEmpty {
-                noResults
+                ScrollView {
+                    noResults
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 80)
+                }
+                .refreshable { await refresh() }
             } else {
-                List(results, id: \.companyName) {result in
+                List(results, id: \.companyName) { result in
                     CompanyRow(result: result)
                 }
                 .listStyle(.plain)
+                .refreshable { await refresh() }
             }
         }
         .onChange(of: query) {
@@ -26,25 +37,24 @@ struct ContentView: View {
         }
     }
 
+    private func refresh() async {
+        _ = await UpdateService().checkAndUpdate()
+        results = (try? DatabaseManager.shared.search(query: query)) ?? []
+    }
+
     private var emptyPrompt: some View {
         VStack(spacing: 8) {
-            Spacer()
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 40))
                 .foregroundStyle(.tertiary)
             Text("Search brands or companies")
                 .foregroundStyle(.secondary)
-            Spacer()
         }
     }
 
     private var noResults: some View {
-        VStack {
-            Spacer()
-            Text("No results for \"\(query)\"")
-                .foregroundStyle(.secondary)
-            Spacer()
-        }
+        Text("No results for \"\(query)\"")
+            .foregroundStyle(.secondary)
     }
 }
 
