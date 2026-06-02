@@ -60,3 +60,24 @@ func TestCreateSchemaIdempotent(t *testing.T) {
 		t.Fatalf("second CreateSchema: %v", err)
 	}
 }
+
+func TestRawKSEHasIndustryColumn(t *testing.T) {
+	f, err := os.CreateTemp("", "db-test-*.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	defer os.Remove(f.Name())
+	conn, err := Open(f.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	if err := CreateSchema(conn); err != nil {
+		t.Fatal(err)
+	}
+	_, err = conn.Exec(`INSERT INTO raw_kse (company_name, status, industry) VALUES ('Test', 'Operating', 'Consumer Staples')`)
+	if err != nil {
+		t.Fatalf("industry column missing or wrong: %v", err)
+	}
+}

@@ -35,6 +35,7 @@ func CreateSchema(conn *sql.DB) error {
 			id           INTEGER PRIMARY KEY AUTOINCREMENT,
 			company_name TEXT NOT NULL,
 			status       TEXT,
+			industry     TEXT,
 			last_updated TEXT
 		);
 		CREATE TABLE IF NOT EXISTS raw_brands (
