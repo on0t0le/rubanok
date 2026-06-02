@@ -100,4 +100,17 @@ final class DatabaseManagerTests: XCTestCase {
         XCTAssertEqual(results.count, 1)
         XCTAssertEqual(results[0].matchedBrand, "Gillette")
     }
+
+    func testSearchHandlesNullStatusAndBrands() throws {
+        try db.importCompanies([[
+            "id": "unknown-co", "name": "Unknown Corp",
+            "sanctioned_ua": false, "brands": [], "sources": []
+            // russia_status intentionally omitted → NULL in DB
+        ]])
+        let results = try db.search(query: "Unknown")
+        XCTAssertEqual(results.count, 1)
+        XCTAssertNil(results[0].russiaStatus)
+        XCTAssertNil(results[0].matchedBrand)
+        XCTAssertFalse(results[0].sanctionedUA)
+    }
 }
