@@ -134,7 +134,7 @@ func writeCompaniesGZ(companies []Company, path string) error {
 func writeVersion(count int, path string) error {
 	now := time.Now().UTC()
 	v := Version{
-		Version:     now.Format("2006-01-02"),
+		Version:     now.Format(time.RFC3339),
 		Records:     count,
 		GeneratedAt: now.Format(time.RFC3339),
 	}
