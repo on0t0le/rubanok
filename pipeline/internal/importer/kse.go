@@ -45,19 +45,16 @@ func parseYaleHTML(conn *sql.DB, r io.Reader) error {
 		return fmt.Errorf("parse html: %w", err)
 	}
 
-	// Find the table whose headers include "Name".
-	var table *goquery.Selection
+	// Collect all tables whose headers include "Name".
+	var tables []*goquery.Selection
 	doc.Find("table").Each(func(_ int, s *goquery.Selection) {
-		if table != nil {
-			return
-		}
 		s.Find("th").Each(func(_ int, th *goquery.Selection) {
 			if strings.TrimSpace(th.Text()) == "Name" {
-				table = s
+				tables = append(tables, s)
 			}
 		})
 	})
-	if table == nil {
+	if len(tables) == 0 {
 		return fmt.Errorf("yale: company table not found in HTML")
 	}
 
@@ -75,21 +72,26 @@ func parseYaleHTML(conn *sql.DB, r io.Reader) error {
 
 	today := time.Now().Format("2006-01-02")
 	var insertErr error
-	table.Find("tbody tr").Each(func(_ int, row *goquery.Selection) {
+	for _, table := range tables {
+		table.Find("tbody tr").Each(func(_ int, row *goquery.Selection) {
+			if insertErr != nil {
+				return
+			}
+			cells := row.Find("td")
+			name := strings.TrimSpace(cells.Eq(0).Text())
+			if name == "" {
+				return
+			}
+			action := strings.TrimSpace(cells.Eq(1).Text())
+			status := mapYaleStatus(action)
+			if _, execErr := stmt.Exec(name, status, today); execErr != nil {
+				insertErr = fmt.Errorf("insert %s: %w", name, execErr)
+			}
+		})
 		if insertErr != nil {
-			return
+			break
 		}
-		cells := row.Find("td")
-		name := strings.TrimSpace(cells.Eq(0).Text())
-		if name == "" {
-			return
-		}
-		action := strings.TrimSpace(cells.Eq(1).Text())
-		status := mapYaleStatus(action)
-		if _, execErr := stmt.Exec(name, status, today); execErr != nil {
-			insertErr = fmt.Errorf("insert %s: %w", name, execErr)
-		}
-	})
+	}
 	if insertErr != nil {
 		return insertErr
 	}
