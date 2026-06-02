@@ -1,0 +1,23 @@
+{
+  "head": { "vars": ["brandLabel", "ownerLabel"] },
+  "results": {
+    "bindings": [
+      {
+        "brandLabel": { "type": "literal", "value": "Pepsi" },
+        "ownerLabel": { "type": "literal", "value": "PepsiCo" }
+      },
+      {
+        "brandLabel": { "type": "literal", "value": "KitKat" },
+        "ownerLabel": { "type": "literal", "value": "Nestlé" }
+      },
+      {
+        "brandLabel": { "type": "literal", "value": "Q99999" },
+        "ownerLabel": { "type": "literal", "value": "Some Company" }
+      },
+      {
+        "brandLabel": { "type": "literal", "value": "" },
+        "ownerLabel": { "type": "literal", "value": "Other Company" }
+      }
+    ]
+  }
+}
