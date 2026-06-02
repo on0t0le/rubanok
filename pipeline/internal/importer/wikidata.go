@@ -78,11 +78,11 @@ func FetchPersonNames(names []string) (map[string]bool, error) {
 
 	resp, err := wikidataClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("http: %w", err)
+		return map[string]bool{}, fmt.Errorf("http: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+		return map[string]bool{}, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 
 	var pr personQueryResponse
