@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-var wikidataClient = &http.Client{Timeout: 60 * time.Second}
+var wikidataClient = &http.Client{Timeout: 120 * time.Second}
 var wikidataEndpoint = "https://query.wikidata.org/sparql"
 
 const wikidataSPARQL = `
@@ -68,7 +68,7 @@ func queryWikidata(client *http.Client) ([]wikidataBrand, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
-	return parseWikidataJSON(resp.Body)
+	return parseWikidataJSON(io.LimitReader(resp.Body, 64<<20))
 }
 
 func parseWikidataJSON(r io.Reader) ([]wikidataBrand, error) {
