@@ -64,7 +64,7 @@ func parseYaleHTML(conn *sql.DB, r io.Reader) error {
 	}
 	defer tx.Rollback()
 
-	stmt, err := tx.Prepare(`INSERT INTO raw_kse (company_name, status, last_updated) VALUES (?, ?, ?)`)
+	stmt, err := tx.Prepare(`INSERT INTO raw_kse (company_name, status, industry, last_updated) VALUES (?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
@@ -84,7 +84,8 @@ func parseYaleHTML(conn *sql.DB, r io.Reader) error {
 			}
 			action := strings.TrimSpace(cells.Eq(1).Text())
 			status := mapYaleStatus(action)
-			if _, execErr := stmt.Exec(name, status, today); execErr != nil {
+			industry := strings.TrimSpace(cells.Eq(2).Text())
+			if _, execErr := stmt.Exec(name, status, industry, today); execErr != nil {
 				insertErr = fmt.Errorf("insert %s: %w", name, execErr)
 			}
 		})

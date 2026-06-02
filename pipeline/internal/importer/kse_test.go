@@ -14,8 +14,8 @@ func TestImportKSEFromPath(t *testing.T) {
 	if err := conn.QueryRow("SELECT COUNT(*) FROM raw_kse").Scan(&count); err != nil {
 		t.Fatal(err)
 	}
-	if count != 5 {
-		t.Errorf("got %d rows, want 5", count)
+	if count != 6 {
+		t.Errorf("got %d rows, want 6", count)
 	}
 }
 
@@ -70,5 +70,21 @@ func TestImportKSESetsLastUpdated(t *testing.T) {
 	}
 	if updated == "" {
 		t.Error("last_updated should be non-empty")
+	}
+}
+
+func TestImportKSEStoresIndustry(t *testing.T) {
+	conn := tempDB(t)
+	if err := ImportKSEFromPath(conn, "testdata/kse.html"); err != nil {
+		t.Fatalf("ImportKSEFromPath: %v", err)
+	}
+	var industry string
+	if err := conn.QueryRow(
+		"SELECT COALESCE(industry, '') FROM raw_kse WHERE company_name = 'Mondelez International'",
+	).Scan(&industry); err != nil {
+		t.Fatal(err)
+	}
+	if industry != "Consumer Staples" {
+		t.Errorf("industry = %q, want Consumer Staples", industry)
 	}
 }
