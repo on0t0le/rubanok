@@ -5,9 +5,14 @@ on:
     - cron: "0 2 * * *"   # 2:00 AM UTC daily
   workflow_dispatch:        # allow manual trigger from GitHub UI
 
+concurrency:
+  group: update-dataset
+  cancel-in-progress: true
+
 jobs:
   update:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write       # needed to push to gh-pages branch
 
