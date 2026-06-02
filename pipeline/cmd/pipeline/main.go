@@ -104,7 +104,7 @@ func newImportBrandsCmd() *cobra.Command {
 }
 
 func newMergeCmd() *cobra.Command {
-	var overridesPath, excludesPath string
+	var overridesPath string
 	cmd := &cobra.Command{
 		Use:   "merge",
 		Short: "Merge raw tables into companies table using fuzzy matching",
@@ -126,23 +126,11 @@ func newMergeCmd() *cobra.Command {
 				}
 			}
 
-			var excludes []string
-			edata, err := os.ReadFile(excludesPath)
-			if err != nil && !os.IsNotExist(err) {
-				return fmt.Errorf("read excludes %s: %w", excludesPath, err)
-			}
-			if err == nil {
-				if err := json.Unmarshal(edata, &excludes); err != nil {
-					return fmt.Errorf("parse excludes %s: %w", excludesPath, err)
-				}
-			}
-
-			fmt.Printf("merging with %d overrides, %d excludes...\n", len(overrides), len(excludes))
-			return merger.Merge(conn, overrides, excludes)
+			fmt.Printf("merging with %d overrides...\n", len(overrides))
+			return merger.Merge(conn, overrides)
 		},
 	}
 	cmd.Flags().StringVar(&overridesPath, "overrides", "data/overrides.json", "path to overrides JSON file")
-	cmd.Flags().StringVar(&excludesPath, "excludes", "data/exclude.json", "path to excludes JSON file")
 	return cmd
 }
 

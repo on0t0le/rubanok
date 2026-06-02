@@ -24,7 +24,7 @@ func TestMerge_MatchedCompany(t *testing.T) {
 	mustExec(t, conn, `INSERT INTO raw_brands (brand_name, company_name, source)
 		VALUES ('Gazprom Neft', 'Gazprom', 'manual')`)
 
-	if err := Merge(conn, nil, nil); err != nil {
+	if err := Merge(conn, nil); err != nil {
 		t.Fatalf("Merge: %v", err)
 	}
 
@@ -71,7 +71,7 @@ func TestMerge_Override(t *testing.T) {
 		VALUES ('Nestle', 'Operating')`)
 
 	overrides := []Override{{KSEName: "Nestle", OpenSanctionsName: "Nestlé S.A."}}
-	if err := Merge(conn, overrides, nil); err != nil {
+	if err := Merge(conn, overrides); err != nil {
 		t.Fatalf("Merge: %v", err)
 	}
 
@@ -91,7 +91,7 @@ func TestMerge_KSEOnly(t *testing.T) {
 	// KSE entry with no matching OS entity
 	mustExec(t, conn, `INSERT INTO raw_kse (company_name, status) VALUES ('UnknownCorp', 'Exited')`)
 
-	if err := Merge(conn, nil, nil); err != nil {
+	if err := Merge(conn, nil); err != nil {
 		t.Fatalf("Merge: %v", err)
 	}
 
@@ -177,7 +177,7 @@ func TestMerge_IndustryFilter(t *testing.T) {
 	mustExec(t, conn, `INSERT INTO raw_kse (company_name, status, industry)
 		VALUES ('Nestlé', 'Reduced Operations', 'Consumer Staples')`)
 
-	if err := Merge(conn, nil, nil); err != nil {
+	if err := Merge(conn, nil); err != nil {
 		t.Fatalf("Merge: %v", err)
 	}
 
@@ -195,6 +195,32 @@ func TestMerge_IndustryFilter(t *testing.T) {
 	}
 	if nestleCount != 1 {
 		t.Errorf("Nestlé (Consumer Staples) should appear in companies, got %d rows", nestleCount)
+	}
+}
+
+func TestMerge_PersonExcluded(t *testing.T) {
+	conn := tempDB(t)
+
+	mustExec(t, conn, `INSERT INTO raw_kse (company_name, status, industry)
+		VALUES ('Jamie Oliver', 'Exited', 'Consumer Staples')`)
+
+	// Override fetchPersonNames to return Jamie Oliver as a person
+	old := fetchPersonNames
+	fetchPersonNames = func(names []string) (map[string]bool, error) {
+		return map[string]bool{"Jamie Oliver": true}, nil
+	}
+	defer func() { fetchPersonNames = old }()
+
+	if err := Merge(conn, nil); err != nil {
+		t.Fatalf("Merge: %v", err)
+	}
+
+	var count int
+	if err := conn.QueryRow(`SELECT COUNT(*) FROM companies WHERE name = 'Jamie Oliver'`).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Errorf("Jamie Oliver (person) should be excluded, got %d rows", count)
 	}
 }
 

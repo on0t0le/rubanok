@@ -7,6 +7,7 @@ import (
 	"strings"
 	"unicode"
 
+	"pipeline/internal/importer"
 	"pipeline/internal/normalize"
 )
 
@@ -45,14 +46,16 @@ func isConsumer(industry string) bool {
 	return consumerIndustries[industry]
 }
 
+var fetchPersonNames = importer.FetchPersonNames
+
 type brandPair struct {
 	brand string
 	owner string
 }
 
 // Merge reads raw tables, fuzzy-matches entities, writes to companies table.
-// overrides and excludes may be nil.
-func Merge(conn *sql.DB, overrides []Override, excludes []string) error {
+// overrides may be nil.
+func Merge(conn *sql.DB, overrides []Override) error {
 	osList, err := loadOpenSanctions(conn)
 	if err != nil {
 		return fmt.Errorf("load opensanctions: %w", err)
@@ -76,10 +79,15 @@ func Merge(conn *sql.DB, overrides []Override, excludes []string) error {
 	}
 	brands := resolveBrands(brandPairs, allNorms)
 
-	// build exclude set: exact company name → skip
-	excludeSet := make(map[string]bool, len(excludes))
-	for _, name := range excludes {
-		excludeSet[name] = true
+	// Detect person-brands via Wikidata and exclude them from output.
+	kseNames := make([]string, len(kseList))
+	for i, k := range kseList {
+		kseNames[i] = k.name
+	}
+	excludeSet, err := fetchPersonNames(kseNames)
+	if err != nil {
+		fmt.Printf("WARN: person detection failed: %v — no persons excluded\n", err)
+		excludeSet = map[string]bool{}
 	}
 
 	// build override map: normalized KSE name → normalized OS name
