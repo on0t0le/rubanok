@@ -86,7 +86,7 @@ func FetchPersonNames(names []string) (map[string]bool, error) {
 	}
 
 	var pr personQueryResponse
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 16<<20)).Decode(&pr); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 16<<20)).Decode(&pr); err != nil { // 16 MB sufficient — person queries return sparse name lists
 		return nil, fmt.Errorf("decode: %w", err)
 	}
 

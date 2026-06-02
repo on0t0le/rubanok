@@ -148,3 +148,24 @@ func TestFetchPersonNames_NetworkError(t *testing.T) {
 		t.Errorf("got %d results on error, want 0", len(result))
 	}
 }
+
+func TestFetchPersonNames_NoPersons(t *testing.T) {
+	fixture := `{"results":{"bindings":[]}}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/sparql-results+json")
+		w.Write([]byte(fixture))
+	}))
+	defer srv.Close()
+
+	old := wikidataEndpoint
+	wikidataEndpoint = srv.URL
+	defer func() { wikidataEndpoint = old }()
+
+	result, err := FetchPersonNames([]string{"PepsiCo", "Nestlé"})
+	if err != nil {
+		t.Fatalf("FetchPersonNames: %v", err)
+	}
+	if len(result) != 0 {
+		t.Errorf("got %d persons, want 0", len(result))
+	}
+}
