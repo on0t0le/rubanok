@@ -17,8 +17,7 @@ var wikidataEndpoint = "https://query.wikidata.org/sparql"
 
 const wikidataSPARQL = `
 SELECT DISTINCT ?brandLabel ?ownerLabel WHERE {
-  ?brand wdt:P31 wd:Q1331049 ;
-         wdt:P127 ?owner .
+  ?brand wdt:P127 ?owner .
   SERVICE wikibase:label { bd:serviceParam wikibase:language "en" }
 }
 LIMIT 50000

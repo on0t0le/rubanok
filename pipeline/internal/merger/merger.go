@@ -258,6 +258,22 @@ func resolveBrands(pairs []brandPair, companyNorms []string) map[string][]string
 			ownerToCompany[normOwner] = normOwner
 			continue
 		}
+		// prefix match: "mondelez" matches "mondelez nabisco"
+		// minimum 5 chars to avoid single-letter false positives (e.g. "p" matching "procter gamble")
+		if len(normOwner) >= 5 {
+			prefixMatch := ""
+			for _, cn := range companyNorms {
+				if strings.HasPrefix(cn, normOwner) || strings.HasPrefix(normOwner, cn) {
+					if len(cn) > len(prefixMatch) {
+						prefixMatch = cn
+					}
+				}
+			}
+			if prefixMatch != "" {
+				ownerToCompany[normOwner] = prefixMatch
+				continue
+			}
+		}
 		bestScore := 0
 		bestNorm := ""
 		for _, cn := range companyNorms {
