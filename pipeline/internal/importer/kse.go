@@ -2,52 +2,62 @@ package importer
 
 import (
 	"database/sql"
-	"encoding/csv"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"strings"
+	"time"
+
+	"github.com/PuerkitoBio/goquery"
 )
 
-// kseURL is the KSE Leave Russia tracker CSV download.
-// ⚠️ Confirm this URL before running in production — check https://leave-russia.org
-const kseURL = "https://leave-russia.org/export/csv"
+const yaleURL = "https://som.yale.edu/story/2022/over-1000-companies-have-curtailed-operations-russia-some-remain"
 
-// ImportKSE downloads the KSE Leave Russia dataset and imports it.
+// ImportKSE downloads the Yale SOM Leave Russia tracker and imports it.
 func ImportKSE(conn *sql.DB) error {
-	resp, err := http.Get(kseURL)
+	resp, err := http.Get(yaleURL)
 	if err != nil {
-		return fmt.Errorf("download kse: %w", err)
+		return fmt.Errorf("download yale: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("kse HTTP %d", resp.StatusCode)
+		return fmt.Errorf("yale HTTP %d", resp.StatusCode)
 	}
-	return parseKSECSV(conn, resp.Body)
+	return parseYaleHTML(conn, resp.Body)
 }
 
-// ImportKSEFromPath imports from a local CSV file (used in tests).
+// ImportKSEFromPath imports from a local HTML file (used in tests).
 func ImportKSEFromPath(conn *sql.DB, path string) error {
 	f, err := os.Open(path)
 	if err != nil {
 		return fmt.Errorf("open %s: %w", path, err)
 	}
 	defer f.Close()
-	return parseKSECSV(conn, f)
+	return parseYaleHTML(conn, f)
 }
 
-func parseKSECSV(conn *sql.DB, r io.Reader) error {
-	cr := csv.NewReader(r)
-	cr.FieldsPerRecord = -1
-	cr.LazyQuotes = true
-
-	header, err := cr.Read()
+func parseYaleHTML(conn *sql.DB, r io.Reader) error {
+	doc, err := goquery.NewDocumentFromReader(r)
 	if err != nil {
-		return fmt.Errorf("read header: %w", err)
+		return fmt.Errorf("parse html: %w", err)
 	}
-	fmt.Printf("KSE CSV headers: %v\n", header)
-	idx := csvIndex(header)
+
+	// Find the table whose headers include "Name".
+	var table *goquery.Selection
+	doc.Find("table").Each(func(_ int, s *goquery.Selection) {
+		if table != nil {
+			return
+		}
+		s.Find("th").Each(func(_ int, th *goquery.Selection) {
+			if strings.TrimSpace(th.Text()) == "Name" {
+				table = s
+			}
+		})
+	})
+	if table == nil {
+		return fmt.Errorf("yale: company table not found in HTML")
+	}
 
 	tx, err := conn.Begin()
 	if err != nil {
@@ -61,40 +71,50 @@ func parseKSECSV(conn *sql.DB, r io.Reader) error {
 	}
 	defer stmt.Close()
 
-	for {
-		row, err := cr.Read()
-		if err == io.EOF {
-			break
+	today := time.Now().Format("2006-01-02")
+	var insertErr error
+	table.Find("tbody tr").Each(func(_ int, row *goquery.Selection) {
+		if insertErr != nil {
+			return
 		}
-		if err != nil {
-			return fmt.Errorf("read row: %w", err)
-		}
-
-		name := csvField(row, idx, "Company")
+		cells := row.Find("td")
+		name := strings.TrimSpace(cells.Eq(0).Text())
 		if name == "" {
-			continue
+			return
 		}
-		status := normalizeKSEStatus(csvField(row, idx, "Status"))
-		updated := csvField(row, idx, "LastUpdated")
-
-		if _, err := stmt.Exec(name, status, updated); err != nil {
-			return fmt.Errorf("insert %s: %w", name, err)
+		action := strings.TrimSpace(cells.Eq(1).Text())
+		status := mapYaleStatus(action)
+		if _, execErr := stmt.Exec(name, status, today); execErr != nil {
+			insertErr = fmt.Errorf("insert %s: %w", name, execErr)
 		}
+	})
+	if insertErr != nil {
+		return insertErr
 	}
 	return tx.Commit()
 }
 
-func normalizeKSEStatus(s string) string {
-	switch strings.ToLower(strings.TrimSpace(s)) {
-	case "exited", "left":
-		return "Exited"
-	case "suspended", "paused":
-		return "Suspended"
-	case "reduced", "reduced operations":
-		return "Reduced Operations"
-	case "operating", "continues":
-		return "Operating"
-	default:
-		return "Unknown"
+func mapYaleStatus(action string) string {
+	lower := strings.ToLower(action)
+	for _, kw := range []string{"exit", "left", "withdraw", "depart", "divest", "sold", "liquidat", "shut down", "clos"} {
+		if strings.Contains(lower, kw) {
+			return "Exited"
+		}
 	}
+	for _, kw := range []string{"suspend", "pause", "halt", "stop", "discontinu", "freeze"} {
+		if strings.Contains(lower, kw) {
+			return "Suspended"
+		}
+	}
+	for _, kw := range []string{"reduc", "limit", "curtail", "scale back", "wind down", "partial"} {
+		if strings.Contains(lower, kw) {
+			return "Reduced Operations"
+		}
+	}
+	for _, kw := range []string{"continu", "operat", "remain", "stay", "expand", "increas"} {
+		if strings.Contains(lower, kw) {
+			return "Operating"
+		}
+	}
+	return "Unknown"
 }
