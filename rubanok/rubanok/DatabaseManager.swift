@@ -117,7 +117,8 @@ final class DatabaseManager {
 
         var results: [CompanyResult] = []
         while sqlite3_step(stmt) == SQLITE_ROW {
-            let name       = String(cString: sqlite3_column_text(stmt, 0))
+            guard let namePtr = sqlite3_column_text(stmt, 0) else { continue }
+            let name       = String(cString: namePtr)
             let status     = sqlite3_column_type(stmt, 1) != SQLITE_NULL
                              ? String(cString: sqlite3_column_text(stmt, 1)) : nil
             let sanctioned = sqlite3_column_int(stmt, 2) != 0
