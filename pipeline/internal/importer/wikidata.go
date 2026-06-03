@@ -16,13 +16,19 @@ import (
 var wikidataClient = &http.Client{Timeout: 120 * time.Second}
 var wikidataEndpoint = "https://query.wikidata.org/sparql"
 
+// wikidataSPARQL fetches brand→company for typed brand entities (Q1331049=product brand,
+// Q167270=trademark, Q431289=brand, Q80359036=alcohol brand, Q10373548=whisky distillery).
+// Uses P127 (owned by) and P176 (manufacturer) to cover different ownership styles.
 const wikidataSPARQL = `
 SELECT DISTINCT ?brandLabel ?ownerLabel WHERE {
-  ?brand wdt:P127 ?owner .
+  VALUES ?type { wd:Q1331049 wd:Q167270 wd:Q431289 wd:Q80359036 wd:Q10373548 }
+  ?brand wdt:P31 ?type .
+  { ?brand wdt:P127 ?owner . } UNION { ?brand wdt:P176 ?owner . }
   SERVICE wikibase:label { bd:serviceParam wikibase:language "en" }
 }
 LIMIT 50000
 `
+
 
 var qidRE = regexp.MustCompile(`^Q\d+$`)
 
@@ -102,15 +108,15 @@ func FetchPersonNames(names []string) (map[string]bool, error) {
 // ImportBrandsFromWikidata fetches brand→company pairs from the Wikidata
 // SPARQL endpoint and inserts them into raw_brands with source "wikidata".
 func ImportBrandsFromWikidata(conn *sql.DB) error {
-	brands, err := queryWikidata(wikidataClient)
+	brands, err := queryWikidata(wikidataClient, wikidataSPARQL)
 	if err != nil {
 		return fmt.Errorf("wikidata query: %w", err)
 	}
 	return insertWikidataBrands(conn, brands)
 }
 
-func queryWikidata(client *http.Client) ([]wikidataBrand, error) {
-	body := url.Values{"query": {wikidataSPARQL}}.Encode()
+func queryWikidata(client *http.Client, sparql string) ([]wikidataBrand, error) {
+	body := url.Values{"query": {sparql}}.Encode()
 	req, err := http.NewRequest("POST", wikidataEndpoint, strings.NewReader(body))
 	if err != nil {
 		return nil, err
@@ -124,11 +130,6 @@ func queryWikidata(client *http.Client) ([]wikidataBrand, error) {
 		return nil, fmt.Errorf("http: %w", err)
 	}
 	defer resp.Body.Close()
-	fmt.Printf("DEBUG wikidata: status=%d content-type=%q x-cache=%q\n",
-		resp.StatusCode,
-		resp.Header.Get("Content-Type"),
-		resp.Header.Get("X-Cache"),
-	)
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
@@ -136,16 +137,10 @@ func queryWikidata(client *http.Client) ([]wikidataBrand, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read: %w", err)
 	}
-	fmt.Printf("DEBUG wikidata: body_bytes=%d body_preview=%.500s\n", len(raw), raw)
 	// Wikidata may return literal newlines inside JSON string values (invalid JSON);
 	// replace them with spaces before parsing.
 	raw = bytes.ReplaceAll(raw, []byte("\n"), []byte(" "))
-	brands, err := parseWikidataJSON(bytes.NewReader(raw))
-	if err != nil {
-		return nil, err
-	}
-	fmt.Printf("DEBUG wikidata: parsed_brands=%d\n", len(brands))
-	return brands, nil
+	return parseWikidataJSON(bytes.NewReader(raw))
 }
 
 func parseWikidataJSON(r io.Reader) ([]wikidataBrand, error) {
