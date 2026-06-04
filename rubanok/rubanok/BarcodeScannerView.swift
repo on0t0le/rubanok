@@ -27,6 +27,25 @@ private struct CameraPreview: UIViewRepresentable {
         let view = UIView(frame: .zero)
         view.backgroundColor = .black
 
+        let status = AVCaptureDevice.authorizationStatus(for: .video)
+        guard status == .authorized || status == .notDetermined else {
+            let label = UILabel()
+            label.text = "Camera access denied.\nEnable it in Settings → Privacy → Camera."
+            label.numberOfLines = 0
+            label.textAlignment = .center
+            label.textColor = .white
+            label.font = .preferredFont(forTextStyle: .callout)
+            label.translatesAutoresizingMaskIntoConstraints = false
+            view.addSubview(label)
+            NSLayoutConstraint.activate([
+                label.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+                label.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+                label.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 24),
+                label.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -24),
+            ])
+            return view
+        }
+
         let session = AVCaptureSession()
         context.coordinator.session = session
 

@@ -153,6 +153,7 @@ final class DatabaseManager {
     func importBarcodes(_ barcodes: [[String: String]]) throws {
         try exec("BEGIN TRANSACTION")
         do {
+            try exec("DELETE FROM barcodes")
             let sql = "INSERT OR REPLACE INTO barcodes (code, brand) VALUES (?, ?)"
             var stmt: OpaquePointer?
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
