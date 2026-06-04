@@ -27,6 +27,7 @@ func main() {
 		newImportOpenSanctionsCmd(),
 		newImportKSECmd(),
 		newImportBrandsCmd(),
+		newImportBarcodesCmd(),
 	)
 
 	root.AddCommand(importCmd, newMergeCmd(), newExportCmd())
@@ -99,6 +100,22 @@ func newImportBrandsCmd() *cobra.Command {
 
 			fmt.Println("importing brands from Open Food Facts (this may take several minutes)...")
 			return importer.ImportBrandsFromOpenFoodFacts(conn)
+		},
+	}
+}
+
+func newImportBarcodesCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "barcodes",
+		Short: "Import barcode→brand mappings from Open Food Facts products CSV",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			conn, err := openDB()
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+			fmt.Println("importing barcodes from Open Food Facts CSV (may take several minutes)...")
+			return importer.ImportBarcodesFromOpenFoodFacts(conn)
 		},
 	}
 }

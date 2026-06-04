@@ -12,7 +12,7 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     permissions:
       contents: write       # needed to push to gh-pages branch
 
@@ -41,6 +41,9 @@ jobs:
 
       - name: Merge entities
         run: ./pipeline-bin merge --overrides data/overrides.json
+
+      - name: Import barcodes (Open Food Facts)
+        run: ./pipeline-bin import barcodes
 
       - name: Export dataset
         run: ./pipeline-bin export --output output
