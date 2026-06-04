@@ -402,6 +402,169 @@ func loadBrands(conn *sql.DB) ([]brandPair, error) {
 	return result, rows.Err()
 }
 
+type wsrwRow struct {
+	slug   string
+	name   string
+	status string
+	brands []string
+}
+
+// MergeWSRW matches raw_wsrw companies against existing companies table entries.
+// Matches update the sources list; unmatched entries are inserted as new companies.
+func MergeWSRW(conn *sql.DB) error {
+	rows, err := conn.Query(`SELECT slug, name, status, COALESCE(brands, '') FROM raw_wsrw`)
+	if err != nil {
+		return fmt.Errorf("load raw_wsrw: %w", err)
+	}
+	defer rows.Close()
+	var wsrwList []wsrwRow
+	for rows.Next() {
+		var w wsrwRow
+		var brandsCSV string
+		if err := rows.Scan(&w.slug, &w.name, &w.status, &brandsCSV); err != nil {
+			return err
+		}
+		if brandsCSV != "" {
+			for _, b := range strings.Split(brandsCSV, ",") {
+				b = strings.TrimSpace(b)
+				if b != "" {
+					w.brands = append(w.brands, b)
+				}
+			}
+		}
+		wsrwList = append(wsrwList, w)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	// Load existing companies for fuzzy matching.
+	type existingCompany struct {
+		id       string
+		name     string
+		normName string
+		sources  []string
+		brands   []string
+	}
+	compRows, err := conn.Query(`SELECT id, name, COALESCE(sources, '[]'), COALESCE(brands, '[]') FROM companies`)
+	if err != nil {
+		return fmt.Errorf("load companies: %w", err)
+	}
+	defer compRows.Close()
+	var existing []existingCompany
+	for compRows.Next() {
+		var ec existingCompany
+		var sourcesJSON, brandsJSON string
+		if err := compRows.Scan(&ec.id, &ec.name, &sourcesJSON, &brandsJSON); err != nil {
+			return err
+		}
+		json.Unmarshal([]byte(sourcesJSON), &ec.sources)
+		json.Unmarshal([]byte(brandsJSON), &ec.brands)
+		ec.normName = normalize.Company(ec.name)
+		existing = append(existing, ec)
+	}
+	if err := compRows.Err(); err != nil {
+		return err
+	}
+
+	// Pre-compute trigrams for existing company names.
+	type normEntry struct {
+		idx    int
+		sorted string
+		tgrams map[string]bool
+	}
+	normEntries := make([]normEntry, len(existing))
+	for i, ec := range existing {
+		s := normalize.SortTokens(ec.normName)
+		normEntries[i] = normEntry{idx: i, sorted: s, tgrams: normalize.Trigrams(s)}
+	}
+
+	tx, err := conn.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	updateStmt, err := tx.Prepare(`UPDATE companies SET russia_status = ?, sources = ?, brands = ? WHERE id = ?`)
+	if err != nil {
+		return err
+	}
+	defer updateStmt.Close()
+
+	insertStmt, err := tx.Prepare(`
+		INSERT OR IGNORE INTO companies (id, name, aliases, russia_status, sanctioned_ua, brands, sources)
+		VALUES (?, ?, '[]', ?, 0, ?, ?)
+	`)
+	if err != nil {
+		return err
+	}
+	defer insertStmt.Close()
+
+	updated, inserted := 0, 0
+	slugSeen := make(map[string]bool)
+	for _, w := range wsrwList {
+		normW := normalize.Company(w.name)
+		wSorted := normalize.SortTokens(normW)
+		wTgrams := normalize.Trigrams(wSorted)
+
+		bestScore, bestIdx := 0, -1
+		for _, ne := range normEntries {
+			score := normalize.SimilarityFromSets(wTgrams, ne.tgrams)
+			if score > bestScore {
+				bestScore = score
+				bestIdx = ne.idx
+			}
+		}
+
+		if bestScore >= 70 && bestIdx >= 0 {
+			// Update existing company: set/update russia_status and add WSRW to sources.
+			ec := existing[bestIdx]
+			sources := ec.sources
+			if !containsStr(sources, "WSRW") {
+				sources = append(sources, "WSRW")
+			}
+			// Merge brands: add WSRW brands not already in the list.
+			brands := ec.brands
+			for _, b := range w.brands {
+				if !containsStr(brands, b) {
+					brands = append(brands, b)
+				}
+			}
+			if _, err := updateStmt.Exec(w.status, marshalJSON(sources), marshalJSON(brands), ec.id); err != nil {
+				return fmt.Errorf("update %s: %w", ec.id, err)
+			}
+			updated++
+		} else {
+			// Insert as new company.
+			id := w.slug
+			if slugSeen[id] {
+				id = fmt.Sprintf("wsrw-%s", w.slug)
+			}
+			slugSeen[id] = true
+			brandsJSON := marshalJSON(w.brands)
+			if w.brands == nil {
+				brandsJSON = "[]"
+			}
+			if _, err := insertStmt.Exec(id, w.name, w.status, brandsJSON, marshalJSON([]string{"WSRW"})); err != nil {
+				return fmt.Errorf("insert wsrw %s: %w", w.slug, err)
+			}
+			inserted++
+		}
+	}
+
+	fmt.Printf("WSRW merge: %d updated, %d inserted\n", updated, inserted)
+	return tx.Commit()
+}
+
+func containsStr(slice []string, s string) bool {
+	for _, v := range slice {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
 func slugify(s string) string {
 	s = strings.ToLower(s)
 	var b strings.Builder

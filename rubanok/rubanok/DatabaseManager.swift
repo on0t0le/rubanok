@@ -109,7 +109,7 @@ final class DatabaseManager {
             SELECT name, russia_status, sanctioned_ua, brands_json
             FROM companies
             WHERE (name LIKE ? OR brands_json LIKE ?)
-              AND (sources_json LIKE '%KSE%' OR brands_json != '[]')
+              AND (sources_json LIKE '%KSE%' OR sources_json LIKE '%WSRW%' OR brands_json != '[]')
             LIMIT 50
         """
         var stmt: OpaquePointer?

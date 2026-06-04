@@ -39,6 +39,9 @@ jobs:
       - name: Import brands (Wikidata + Open Food Facts)
         run: ./pipeline-bin import brands
 
+      - name: Import WSRW (who-support-rus-war.com)
+        run: ./pipeline-bin import wsrw
+
       - name: Merge entities
         run: ./pipeline-bin merge --overrides data/overrides.json
 

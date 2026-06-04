@@ -224,6 +224,71 @@ func TestMerge_PersonExcluded(t *testing.T) {
 	}
 }
 
+func TestMergeWSRW_MatchesExisting(t *testing.T) {
+	conn := tempDB(t)
+
+	// Existing company already in companies table
+	mustExec(t, conn, `INSERT INTO companies (id, name, aliases, russia_status, sanctioned_ua, brands, sources)
+		VALUES ('henkel', 'Henkel AG', '[]', 'Unknown', 0, '[]', '["KSE"]')`)
+
+	mustExec(t, conn, `INSERT INTO raw_wsrw (slug, name, status, brands)
+		VALUES ('henkel', 'Henkel', 'Operating', 'Fa,Schwarzkopf,Persil')`)
+
+	if err := MergeWSRW(conn); err != nil {
+		t.Fatalf("MergeWSRW: %v", err)
+	}
+
+	var status, sourcesJSON, brandsJSON string
+	if err := conn.QueryRow(`SELECT russia_status, sources, brands FROM companies WHERE id = 'henkel'`).
+		Scan(&status, &sourcesJSON, &brandsJSON); err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	if status != "Operating" {
+		t.Errorf("russia_status = %q, want Operating", status)
+	}
+	var sources []string
+	if err := json.Unmarshal([]byte(sourcesJSON), &sources); err != nil {
+		t.Fatalf("parse sources: %v", err)
+	}
+	if !contains(sources, "WSRW") || !contains(sources, "KSE") {
+		t.Errorf("sources = %v, want both KSE and WSRW", sources)
+	}
+	var brands []string
+	if err := json.Unmarshal([]byte(brandsJSON), &brands); err != nil {
+		t.Fatalf("parse brands: %v", err)
+	}
+	if !contains(brands, "Fa") || !contains(brands, "Schwarzkopf") {
+		t.Errorf("brands = %v, want Fa and Schwarzkopf included", brands)
+	}
+}
+
+func TestMergeWSRW_InsertsNew(t *testing.T) {
+	conn := tempDB(t)
+
+	mustExec(t, conn, `INSERT INTO raw_wsrw (slug, name, status, brands)
+		VALUES ('spar-holding', 'SPAR Holding', 'Tacking', '')`)
+
+	if err := MergeWSRW(conn); err != nil {
+		t.Fatalf("MergeWSRW: %v", err)
+	}
+
+	var count int
+	if err := conn.QueryRow(`SELECT COUNT(*) FROM companies WHERE id = 'spar-holding'`).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Errorf("got %d rows for WSRW-only company, want 1", count)
+	}
+}
+
+func TestMergeWSRW_Empty(t *testing.T) {
+	conn := tempDB(t)
+	// raw_wsrw is empty — should complete without error
+	if err := MergeWSRW(conn); err != nil {
+		t.Fatalf("MergeWSRW on empty table: %v", err)
+	}
+}
+
 func contains(s []string, v string) bool {
 	for _, x := range s {
 		if x == v {

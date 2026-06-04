@@ -49,6 +49,12 @@ func CreateSchema(conn *sql.DB) error {
 			code  TEXT PRIMARY KEY,
 			brand TEXT NOT NULL
 		);
+		CREATE TABLE IF NOT EXISTS raw_wsrw (
+			slug   TEXT PRIMARY KEY,
+			name   TEXT NOT NULL,
+			status TEXT,
+			brands TEXT
+		);
 		CREATE TABLE IF NOT EXISTS companies (
 			id            TEXT PRIMARY KEY,
 			name          TEXT NOT NULL,

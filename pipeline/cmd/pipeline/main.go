@@ -28,6 +28,7 @@ func main() {
 		newImportKSECmd(),
 		newImportBrandsCmd(),
 		newImportBarcodesCmd(),
+		newImportWSRWCmd(),
 	)
 
 	root.AddCommand(importCmd, newMergeCmd(), newExportCmd())
@@ -120,6 +121,22 @@ func newImportBarcodesCmd() *cobra.Command {
 	}
 }
 
+func newImportWSRWCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "wsrw",
+		Short: "Import companies from who-support-rus-war.com",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			conn, err := openDB()
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+			fmt.Println("importing companies from who-support-rus-war.com...")
+			return importer.ImportFromWSRW(conn)
+		},
+	}
+}
+
 func newMergeCmd() *cobra.Command {
 	var overridesPath string
 	cmd := &cobra.Command{
@@ -144,7 +161,11 @@ func newMergeCmd() *cobra.Command {
 			}
 
 			fmt.Printf("merging with %d overrides...\n", len(overrides))
-			return merger.Merge(conn, overrides)
+			if err := merger.Merge(conn, overrides); err != nil {
+				return err
+			}
+			fmt.Println("merging WSRW companies...")
+			return merger.MergeWSRW(conn)
 		},
 	}
 	cmd.Flags().StringVar(&overridesPath, "overrides", "data/overrides.json", "path to overrides JSON file")

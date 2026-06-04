@@ -174,9 +174,11 @@ private struct CompanyRow: View {
     private func statusColor(_ status: String) -> Color {
         switch status {
         case "Operating":           return .red
+        case "Bypassing":           return .red
         case "Exited":              return .green
         case "Suspended",
-             "Reduced Operations":  return .orange
+             "Reduced Operations",
+             "Tacking":             return .orange
         default:                    return .gray
         }
     }
