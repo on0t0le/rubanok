@@ -76,6 +76,9 @@ final class UpdateService {
                 return .dataError(UpdateError.invalidJSON)
             }
             try db.importCompanies(companies)
+            if let barcodes = root["barcodes"] as? [[String: String]] {
+                try db.importBarcodes(barcodes)
+            }
             UserDefaults.standard.set(manifest.version, forKey: AppConfig.versionKey)
             return .updated(records: companies.count)
         } catch {
