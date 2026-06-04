@@ -45,7 +45,9 @@ final class UpdateService {
 
         let manifest: VersionManifest
         do {
-            let (data, _) = try await session.data(from: AppConfig.versionURL)
+            var req = URLRequest(url: AppConfig.versionURL)
+            req.cachePolicy = .reloadIgnoringLocalCacheData
+            let (data, _) = try await session.data(for: req)
             manifest = try JSONDecoder().decode(VersionManifest.self, from: data)
         } catch {
             return .networkError(error)
