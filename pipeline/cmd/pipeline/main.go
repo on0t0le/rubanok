@@ -86,13 +86,19 @@ func newImportKSECmd() *cobra.Command {
 func newImportBrandsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "brands",
-		Short: "Import brand→company mappings from Wikidata and Open Food Facts",
+		Short: "Import brand→company mappings from static file, Wikidata and Open Food Facts",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			conn, err := openDB()
 			if err != nil {
 				return err
 			}
 			defer conn.Close()
+
+			if err := importer.ImportBrandsFromJSONPath(conn, "data/brands.json"); err != nil {
+				fmt.Printf("WARN: static brands: %v\n", err)
+			} else {
+				fmt.Println("imported static brands from data/brands.json")
+			}
 
 			fmt.Println("importing brands from Wikidata...")
 			if err := importer.ImportBrandsFromWikidata(conn); err != nil {
