@@ -23,9 +23,16 @@ type Company struct {
 	Sources      []string `json:"sources"`
 }
 
+// BarcodeEntry maps a product barcode to a brand name in the output dataset.
+type BarcodeEntry struct {
+	Code  string `json:"code"`
+	Brand string `json:"brand"`
+}
+
 // Output is the top-level structure of companies.json.gz.
 type Output struct {
-	Companies []Company `json:"companies"`
+	Companies []Company      `json:"companies"`
+	Barcodes  []BarcodeEntry `json:"barcodes"`
 }
 
 // Version is the structure of version.json.
@@ -41,12 +48,16 @@ func Export(conn *sql.DB, outputDir string) error {
 	if err != nil {
 		return fmt.Errorf("load companies: %w", err)
 	}
+	barcodes, err := loadBarcodes(conn)
+	if err != nil {
+		return fmt.Errorf("load barcodes: %w", err)
+	}
 
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
 		return fmt.Errorf("mkdir %s: %w", outputDir, err)
 	}
 
-	if err := writeCompaniesGZ(companies, filepath.Join(outputDir, "companies.json.gz")); err != nil {
+	if err := writeCompaniesGZ(companies, barcodes, filepath.Join(outputDir, "companies.json.gz")); err != nil {
 		return fmt.Errorf("write companies.json.gz: %w", err)
 	}
 	if err := writeVersion(len(companies), filepath.Join(outputDir, "version.json")); err != nil {
@@ -112,8 +123,30 @@ func loadCompanies(conn *sql.DB) ([]Company, error) {
 	return result, rows.Err()
 }
 
-func writeCompaniesGZ(companies []Company, path string) error {
-	data, err := json.Marshal(Output{Companies: companies})
+func loadBarcodes(conn *sql.DB) ([]BarcodeEntry, error) {
+	rows, err := conn.Query(`SELECT code, brand FROM raw_barcodes ORDER BY code`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []BarcodeEntry
+	for rows.Next() {
+		var e BarcodeEntry
+		if err := rows.Scan(&e.Code, &e.Brand); err != nil {
+			return nil, err
+		}
+		result = append(result, e)
+	}
+	return result, rows.Err()
+}
+
+func writeCompaniesGZ(companies []Company, barcodes []BarcodeEntry, path string) error {
+	out := Output{Companies: companies, Barcodes: barcodes}
+	if out.Barcodes == nil {
+		out.Barcodes = []BarcodeEntry{}
+	}
+	data, err := json.Marshal(out)
 	if err != nil {
 		return err
 	}
