@@ -48,8 +48,9 @@ final class DatabaseManager {
     func importCompanies(_ companies: [[String: Any]]) throws {
         try exec("BEGIN TRANSACTION")
         do {
+            try exec("DELETE FROM companies")
             let sql = """
-                INSERT OR REPLACE INTO companies
+                INSERT INTO companies
                     (id, name, russia_status, sanctioned_ua, brands_json, sources_json)
                 VALUES (?, ?, ?, ?, ?, ?)
             """
