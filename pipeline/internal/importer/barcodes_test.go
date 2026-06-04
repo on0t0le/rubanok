@@ -55,7 +55,9 @@ func TestImportBarcodesFromReader_CaseInsensitive(t *testing.T) {
 	}
 
 	var brand string
-	conn.QueryRow(`SELECT brand FROM raw_barcodes WHERE code = '0012000001253'`).Scan(&brand)
+	if err := conn.QueryRow(`SELECT brand FROM raw_barcodes WHERE code = '0012000001253'`).Scan(&brand); err != nil {
+		t.Fatalf("barcode not inserted: %v", err)
+	}
 	if brand != "Pepsi" {
 		t.Errorf("brand = %q, want Pepsi (original casing from companies table)", brand)
 	}

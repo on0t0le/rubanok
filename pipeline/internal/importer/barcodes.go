@@ -5,18 +5,22 @@ import (
 	"database/sql"
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"time"
 )
 
 const offProductsCSVURL = "https://static.openfoodfacts.org/data/en.openfoodfacts.org.products.csv.gz"
 
+var offCSVClient = &http.Client{Timeout: 30 * time.Minute}
+
 // ImportBarcodesFromOpenFoodFacts downloads the OFF products TSV and inserts
 // barcode→brand pairs for brands present in the companies table.
 func ImportBarcodesFromOpenFoodFacts(conn *sql.DB) error {
-	resp, err := http.Get(offProductsCSVURL)
+	resp, err := offCSVClient.Get(offProductsCSVURL)
 	if err != nil {
 		return fmt.Errorf("fetch OFF products CSV: %w", err)
 	}
@@ -87,7 +91,11 @@ func importBarcodesFromReader(conn *sql.DB, r io.Reader) error {
 			break
 		}
 		if err != nil {
-			continue // skip malformed rows
+			var parseErr *csv.ParseError
+			if errors.As(err, &parseErr) {
+				continue // malformed row — skip and keep going
+			}
+			return fmt.Errorf("read CSV row: %w", err) // stream error — abort
 		}
 		if codeIdx >= len(row) || brandsIdx >= len(row) {
 			continue
@@ -102,10 +110,13 @@ func importBarcodesFromReader(conn *sql.DB, r io.Reader) error {
 				continue
 			}
 			if original, ok := brandSet[strings.ToLower(brand)]; ok {
-				if _, err := stmt.Exec(code, original); err != nil {
+				res, err := stmt.Exec(code, original)
+				if err != nil {
 					return fmt.Errorf("insert barcode %q: %w", code, err)
 				}
-				inserted++
+				if n, _ := res.RowsAffected(); n > 0 {
+					inserted++
+				}
 				break // one brand match per barcode row is enough
 			}
 		}
