@@ -7,6 +7,11 @@ struct BarcodeScannerView: View {
     var body: some View {
         CameraPreview(onScan: onScan)
             .ignoresSafeArea()
+            .overlay {
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(.red, lineWidth: 2)
+                    .frame(width: 260, height: 260)
+            }
             .overlay(alignment: .top) {
                 Text("Point camera at barcode")
                     .font(.caption)
