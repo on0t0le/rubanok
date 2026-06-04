@@ -5,32 +5,38 @@ struct ContentView: View {
     @State private var results: [CompanyResult] = []
 
     var body: some View {
-        VStack(spacing: 0) {
-            SearchBar(query: $query)
-                .padding(.horizontal)
-                .padding(.top)
+        ZStack(alignment: .bottomLeading) {
+            VStack(spacing: 0) {
+                SearchBar(query: $query)
+                    .padding(.horizontal)
+                    .padding(.top)
 
-            if query.isEmpty {
-                ScrollView {
-                    emptyPrompt
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 80)
+                if query.isEmpty {
+                    ScrollView {
+                        emptyPrompt
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 80)
+                    }
+                    .refreshable { await refresh() }
+                } else if results.isEmpty {
+                    ScrollView {
+                        noResults
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 80)
+                    }
+                    .refreshable { await refresh() }
+                } else {
+                    List(results, id: \.companyName) { result in
+                        CompanyRow(result: result)
+                    }
+                    .listStyle(.plain)
+                    .refreshable { await refresh() }
                 }
-                .refreshable { await refresh() }
-            } else if results.isEmpty {
-                ScrollView {
-                    noResults
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 80)
-                }
-                .refreshable { await refresh() }
-            } else {
-                List(results, id: \.companyName) { result in
-                    CompanyRow(result: result)
-                }
-                .listStyle(.plain)
-                .refreshable { await refresh() }
             }
+
+            DatasetVersionLabel()
+                .padding(.leading, 12)
+                .padding(.bottom, 8)
         }
         .onChange(of: query) {
             results = (try? DatabaseManager.shared.search(query: query)) ?? []
@@ -134,6 +140,23 @@ private struct CompanyRow: View {
              "Reduced Operations":  return .orange
         default:                    return .gray
         }
+    }
+}
+
+// MARK: - Dataset Version Label
+
+private struct DatasetVersionLabel: View {
+    private var version: String {
+        guard let raw = UserDefaults.standard.string(forKey: AppConfig.versionKey) else {
+            return "no data"
+        }
+        return String(raw.prefix(10))
+    }
+
+    var body: some View {
+        Text("Dataset: \(version)")
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
     }
 }
 
