@@ -83,6 +83,33 @@ func TokenSortRatio(a, b string) int {
 	return trigramSimilarity(sortTokens(a), sortTokens(b))
 }
 
+// Trigrams returns the trigram set for a pre-sorted token string.
+// Use SortTokens + Trigrams to pre-compute the static side of many comparisons,
+// then call SimilarityFromSets to avoid re-hashing on every call.
+func Trigrams(sorted string) map[string]bool {
+	return trigrams(sorted)
+}
+
+// SortTokens sorts tokens in s alphabetically (same transform as TokenSortRatio).
+func SortTokens(s string) string {
+	return sortTokens(s)
+}
+
+// SimilarityFromSets returns 0–100 Jaccard similarity given two pre-computed trigram sets.
+func SimilarityFromSets(a, b map[string]bool) int {
+	if len(a) == 0 || len(b) == 0 {
+		return 0
+	}
+	intersection := 0
+	for t := range a {
+		if b[t] {
+			intersection++
+		}
+	}
+	union := len(a) + len(b) - intersection
+	return (intersection * 100) / union
+}
+
 func sortTokens(s string) string {
 	words := strings.Fields(s)
 	// insertion sort — company names are short

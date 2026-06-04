@@ -86,6 +86,9 @@ func parseOpenSanctionsCSV(conn *sql.DB, r io.Reader) error {
 		if id == "" || name == "" {
 			continue
 		}
+		if csvField(row, idx, "schema") == "Person" {
+			continue
+		}
 
 		aliases := pipesToJSON(csvField(row, idx, "aliases"))
 		country := csvField(row, idx, "countries")
