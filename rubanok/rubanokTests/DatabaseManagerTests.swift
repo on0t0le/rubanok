@@ -113,4 +113,41 @@ final class DatabaseManagerTests: XCTestCase {
         XCTAssertNil(results[0].matchedBrand)
         XCTAssertFalse(results[0].sanctionedUA)
     }
+
+    // MARK: - Barcode tests
+
+    func testImportAndLookupBarcode() throws {
+        let barcodes: [[String: String]] = [
+            ["code": "5000112637922", "brand": "Heineken"],
+            ["code": "0012000001253", "brand": "Pepsi"]
+        ]
+        try db.importBarcodes(barcodes)
+        XCTAssertEqual(db.lookupBarcode("5000112637922"), "Heineken")
+        XCTAssertEqual(db.lookupBarcode("0012000001253"), "Pepsi")
+    }
+
+    func testLookupBarcodeNotFound() {
+        XCTAssertNil(db.lookupBarcode("9999999999999"))
+    }
+
+    func testImportBarcodesSkipsInvalidEntries() throws {
+        let barcodes: [[String: String]] = [
+            ["code": "", "brand": "Pepsi"],      // empty code → skip
+            ["code": "123", "brand": ""],         // empty brand → skip
+            ["code": "456", "brand": "Valid"]     // valid
+        ]
+        try db.importBarcodes(barcodes)
+        XCTAssertNil(db.lookupBarcode(""))
+        XCTAssertEqual(db.lookupBarcode("456"), "Valid")
+    }
+
+    func testImportBarcodesReplacesExisting() throws {
+        try db.importBarcodes([["code": "123", "brand": "OldBrand"]])
+        try db.importBarcodes([["code": "123", "brand": "NewBrand"]])
+        XCTAssertEqual(db.lookupBarcode("123"), "NewBrand")
+    }
+
+    func testImportBarcodesEmptyArraySucceeds() throws {
+        XCTAssertNoThrow(try db.importBarcodes([]))
+    }
 }

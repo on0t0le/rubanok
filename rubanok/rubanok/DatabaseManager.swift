@@ -37,6 +37,10 @@ final class DatabaseManager {
                 brands_json  TEXT,
                 sources_json TEXT
             );
+            CREATE TABLE IF NOT EXISTS barcodes (
+                code  TEXT PRIMARY KEY,
+                brand TEXT NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS meta (
                 key   TEXT PRIMARY KEY,
                 value TEXT
@@ -144,6 +148,45 @@ final class DatabaseManager {
               let brands = try? JSONSerialization.jsonObject(with: data) as? [String]
         else { return nil }
         return brands.first { $0.localizedCaseInsensitiveContains(query) }
+    }
+
+    func importBarcodes(_ barcodes: [[String: String]]) throws {
+        try exec("BEGIN TRANSACTION")
+        do {
+            let sql = "INSERT OR REPLACE INTO barcodes (code, brand) VALUES (?, ?)"
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                throw DBError.prepareFailed(errMsg())
+            }
+            defer { sqlite3_finalize(stmt) }
+
+            for entry in barcodes {
+                guard let code = entry["code"], let brand = entry["brand"],
+                      !code.isEmpty, !brand.isEmpty else { continue }
+                sqlite3_reset(stmt)
+                sqlite3_clear_bindings(stmt)
+                bindText(stmt, 1, code)
+                bindText(stmt, 2, brand)
+                guard sqlite3_step(stmt) == SQLITE_DONE else {
+                    throw DBError.stepFailed(errMsg())
+                }
+            }
+            try exec("COMMIT")
+        } catch {
+            try? exec("ROLLBACK")
+            throw error
+        }
+    }
+
+    func lookupBarcode(_ code: String) -> String? {
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "SELECT brand FROM barcodes WHERE code = ?",
+                                 -1, &stmt, nil) == SQLITE_OK else { return nil }
+        defer { sqlite3_finalize(stmt) }
+        bindText(stmt, 1, code)
+        guard sqlite3_step(stmt) == SQLITE_ROW,
+              let ptr = sqlite3_column_text(stmt, 0) else { return nil }
+        return String(cString: ptr)
     }
 
     // MARK: - Private helpers
