@@ -13,28 +13,18 @@ import (
 	"time"
 )
 
-const offProductsCSVURL = "https://static.openfoodfacts.org/data/en.openfoodfacts.org.products.csv.gz"
+var barcodeCSVClient = &http.Client{Timeout: 30 * time.Minute}
 
-var offCSVClient = &http.Client{Timeout: 30 * time.Minute}
-
-// ImportBarcodesFromOpenFoodFacts downloads the OFF products TSV and inserts
-// barcode→brand pairs for brands present in the companies table.
-func ImportBarcodesFromOpenFoodFacts(conn *sql.DB) error {
-	resp, err := offCSVClient.Get(offProductsCSVURL)
-	if err != nil {
-		return fmt.Errorf("fetch OFF products CSV: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("fetch OFF products CSV: HTTP %d", resp.StatusCode)
-	}
-	return importBarcodesFromReader(conn, resp.Body)
+var barcodeSources = []struct{ label, url string }{
+	{"Open Food Facts", "https://static.openfoodfacts.org/data/en.openfoodfacts.org.products.csv.gz"},
+	{"Open Beauty Facts", "https://static.openbeautyfacts.org/data/en.openbeautyfacts.org.products.csv.gz"},
+	{"Open Products Facts", "https://static.openproductsfacts.org/data/en.openproductsfacts.org.products.csv.gz"},
 }
 
-// importBarcodesFromReader reads a gzip-compressed TSV from r.
-// The TSV must have a header row with at least "code" and "brands" columns.
-// "brands" is a comma-separated list of brand names per row.
-func importBarcodesFromReader(conn *sql.DB, r io.Reader) error {
+// ImportBarcodesFromAllSources imports barcodes from Open Food Facts,
+// Open Beauty Facts, and Open Products Facts. The brand set is built once
+// and reused across all sources; duplicates are skipped (first source wins).
+func ImportBarcodesFromAllSources(conn *sql.DB) error {
 	brandSet, err := buildBrandSet(conn)
 	if err != nil {
 		return fmt.Errorf("build brand set: %w", err)
@@ -43,7 +33,40 @@ func importBarcodesFromReader(conn *sql.DB, r io.Reader) error {
 		fmt.Println("barcodes: no brands in companies table, skipping")
 		return nil
 	}
+	for _, src := range barcodeSources {
+		if err := importBarcodesFromURL(conn, src.url, brandSet, src.label); err != nil {
+			return fmt.Errorf("%s: %w", src.label, err)
+		}
+	}
+	return nil
+}
 
+// ImportBarcodesFromOpenFoodFacts imports barcodes from Open Food Facts only.
+func ImportBarcodesFromOpenFoodFacts(conn *sql.DB) error {
+	brandSet, err := buildBrandSet(conn)
+	if err != nil {
+		return fmt.Errorf("build brand set: %w", err)
+	}
+	if len(brandSet) == 0 {
+		return nil
+	}
+	src := barcodeSources[0]
+	return importBarcodesFromURL(conn, src.url, brandSet, src.label)
+}
+
+func importBarcodesFromURL(conn *sql.DB, url string, brandSet map[string]string, label string) error {
+	resp, err := barcodeCSVClient.Get(url)
+	if err != nil {
+		return fmt.Errorf("fetch CSV: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("fetch CSV: HTTP %d", resp.StatusCode)
+	}
+	return importBarcodesFromReader(conn, resp.Body, brandSet, label)
+}
+
+func importBarcodesFromReader(conn *sql.DB, r io.Reader, brandSet map[string]string, label string) error {
 	gr, err := gzip.NewReader(r)
 	if err != nil {
 		return fmt.Errorf("gzip reader: %w", err)
@@ -69,7 +92,7 @@ func importBarcodesFromReader(conn *sql.DB, r io.Reader) error {
 		}
 	}
 	if codeIdx < 0 || brandsIdx < 0 {
-		return fmt.Errorf("OFF CSV missing required columns: code=%d brands=%d", codeIdx, brandsIdx)
+		return fmt.Errorf("%s CSV missing required columns: code=%d brands=%d", label, codeIdx, brandsIdx)
 	}
 
 	tx, err := conn.Begin()
@@ -93,9 +116,9 @@ func importBarcodesFromReader(conn *sql.DB, r io.Reader) error {
 		if err != nil {
 			var parseErr *csv.ParseError
 			if errors.As(err, &parseErr) {
-				continue // malformed row — skip and keep going
+				continue
 			}
-			return fmt.Errorf("read CSV row: %w", err) // stream error — abort
+			return fmt.Errorf("read CSV row: %w", err)
 		}
 		if codeIdx >= len(row) || brandsIdx >= len(row) {
 			continue
@@ -117,19 +140,21 @@ func importBarcodesFromReader(conn *sql.DB, r io.Reader) error {
 				if n, _ := res.RowsAffected(); n > 0 {
 					inserted++
 				}
-				break // one brand match per barcode row is enough
+				break
 			}
 		}
 	}
 
-	fmt.Printf("OFF barcodes: inserted %d barcode→brand pairs\n", inserted)
+	fmt.Printf("%s: inserted %d barcode→brand pairs\n", label, inserted)
 	return tx.Commit()
 }
 
-// buildBrandSet returns a map of lowercase brand name → original brand name
-// built from the brands JSON arrays stored in the companies table.
+// buildBrandSet returns a map of lowercase name → display name built from
+// both the brands lists and the company names themselves, so products labelled
+// with a parent company name (e.g. "PepsiCo") are matched even when no
+// individual brand name appears in the OFF brands field.
 func buildBrandSet(conn *sql.DB) (map[string]string, error) {
-	rows, err := conn.Query(`SELECT brands FROM companies WHERE brands IS NOT NULL AND brands != '[]'`)
+	rows, err := conn.Query(`SELECT name, brands FROM companies`)
 	if err != nil {
 		return nil, err
 	}
@@ -137,17 +162,22 @@ func buildBrandSet(conn *sql.DB) (map[string]string, error) {
 
 	result := make(map[string]string)
 	for rows.Next() {
-		var brandsJSON string
-		if err := rows.Scan(&brandsJSON); err != nil {
+		var name string
+		var brandsJSON *string
+		if err := rows.Scan(&name, &brandsJSON); err != nil {
 			return nil, err
 		}
-		var brands []string
-		if err := json.Unmarshal([]byte(brandsJSON), &brands); err != nil {
-			continue
+		if name != "" {
+			result[strings.ToLower(name)] = name
 		}
-		for _, b := range brands {
-			if b != "" {
-				result[strings.ToLower(b)] = b
+		if brandsJSON != nil && *brandsJSON != "[]" {
+			var brands []string
+			if err := json.Unmarshal([]byte(*brandsJSON), &brands); err == nil {
+				for _, b := range brands {
+					if b != "" {
+						result[strings.ToLower(b)] = b
+					}
+				}
 			}
 		}
 	}

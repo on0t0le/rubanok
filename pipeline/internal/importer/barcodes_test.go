@@ -23,10 +23,14 @@ func TestImportBarcodesFromReader_MatchesBrand(t *testing.T) {
 	conn := tempDB(t)
 	conn.Exec(`INSERT INTO companies (id, name, brands) VALUES ('heineken', 'Heineken NV', '["Heineken"]')`)
 
+	brandSet, err := buildBrandSet(conn)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := importBarcodesFromReader(conn, buildGzipTSV([][2]string{
 		{"5000112637922", "Heineken,Heineken International"},
 		{"9999999999999", "UnknownBrand"},
-	})); err != nil {
+	}), brandSet, "test"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -48,9 +52,13 @@ func TestImportBarcodesFromReader_CaseInsensitive(t *testing.T) {
 	conn := tempDB(t)
 	conn.Exec(`INSERT INTO companies (id, name, brands) VALUES ('pepsi', 'PepsiCo', '["Pepsi"]')`)
 
+	brandSet, err := buildBrandSet(conn)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := importBarcodesFromReader(conn, buildGzipTSV([][2]string{
 		{"0012000001253", "pepsi"}, // lowercase in CSV, original casing in companies
-	})); err != nil {
+	}), brandSet, "test"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -67,9 +75,13 @@ func TestImportBarcodesFromReader_SkipsEmptyCode(t *testing.T) {
 	conn := tempDB(t)
 	conn.Exec(`INSERT INTO companies (id, name, brands) VALUES ('co', 'Co', '["Brand"]')`)
 
+	brandSet, err := buildBrandSet(conn)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := importBarcodesFromReader(conn, buildGzipTSV([][2]string{
 		{"", "Brand"},
-	})); err != nil {
+	}), brandSet, "test"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -82,11 +94,10 @@ func TestImportBarcodesFromReader_SkipsEmptyCode(t *testing.T) {
 
 func TestImportBarcodesFromReader_NoCompanies(t *testing.T) {
 	conn := tempDB(t)
-	// no companies → empty brand set → nothing to match
-
+	// empty brand set → nothing to match
 	if err := importBarcodesFromReader(conn, buildGzipTSV([][2]string{
 		{"123", "SomeBrand"},
-	})); err != nil {
+	}), map[string]string{}, "test"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -94,5 +105,30 @@ func TestImportBarcodesFromReader_NoCompanies(t *testing.T) {
 	conn.QueryRow(`SELECT COUNT(*) FROM raw_barcodes`).Scan(&count)
 	if count != 0 {
 		t.Errorf("count = %d, want 0", count)
+	}
+}
+
+func TestImportBarcodesFromReader_MatchesCompanyName(t *testing.T) {
+	conn := tempDB(t)
+	// No brands list — only company name. Products labelled with the parent
+	// company name (e.g. "Irish Distillers") should still match.
+	conn.Exec(`INSERT INTO companies (id, name, brands) VALUES ('id', 'Irish Distillers', NULL)`)
+
+	brandSet, err := buildBrandSet(conn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := importBarcodesFromReader(conn, buildGzipTSV([][2]string{
+		{"5011007003005", "Irish Distillers"},
+	}), brandSet, "test"); err != nil {
+		t.Fatal(err)
+	}
+
+	var brand string
+	if err := conn.QueryRow(`SELECT brand FROM raw_barcodes WHERE code = '5011007003005'`).Scan(&brand); err != nil {
+		t.Fatalf("barcode not inserted: %v", err)
+	}
+	if brand != "Irish Distillers" {
+		t.Errorf("brand = %q, want Irish Distillers", brand)
 	}
 }

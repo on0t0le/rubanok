@@ -107,15 +107,15 @@ func newImportBrandsCmd() *cobra.Command {
 func newImportBarcodesCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "barcodes",
-		Short: "Import barcode→brand mappings from Open Food Facts products CSV",
+		Short: "Import barcode→brand mappings from Open Food Facts, Open Beauty Facts, and Open Products Facts",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			conn, err := openDB()
 			if err != nil {
 				return err
 			}
 			defer conn.Close()
-			fmt.Println("importing barcodes from Open Food Facts CSV (may take several minutes)...")
-			return importer.ImportBarcodesFromOpenFoodFacts(conn)
+			fmt.Println("importing barcodes from all sources (may take several minutes)...")
+			return importer.ImportBarcodesFromAllSources(conn)
 		},
 	}
 }
