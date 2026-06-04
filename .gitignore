@@ -7,3 +7,9 @@ pipeline.db
 
 # pipeline output (published to gh-pages branch, not committed to main)
 output/
+
+# docs plans/specs (local working documents)
+docs/
+
+# Xcode user interface state (machine-specific)
+*.xcuserstate
