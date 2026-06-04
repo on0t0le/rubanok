@@ -43,7 +43,13 @@ func ImportBarcodesFromAllSources(conn *sql.DB) error {
 			return fmt.Errorf("%s: %w", src.label, err)
 		}
 	}
-	return DeriveBarcodePrefixes(conn)
+	if err := DeriveBarcodePrefixes(conn); err != nil {
+		return err
+	}
+	if err := ImportPrefixesFromJSONPath(conn, "data/prefixes.json"); err != nil {
+		fmt.Printf("WARN: static prefixes: %v\n", err)
+	}
+	return nil
 }
 
 // ImportBarcodesFromOpenFoodFacts imports barcodes from Open Food Facts only.

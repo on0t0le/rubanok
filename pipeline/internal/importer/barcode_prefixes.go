@@ -2,7 +2,9 @@ package importer
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"os"
 )
 
 const (
@@ -82,5 +84,43 @@ func DeriveBarcodePrefixes(conn *sql.DB) error {
 	}
 
 	fmt.Printf("barcode prefixes: derived %d reliable prefixes\n", len(reliable))
+	return tx.Commit()
+}
+
+type staticPrefixEntry struct {
+	Prefix string `json:"prefix"`
+	Brand  string `json:"brand"`
+}
+
+// ImportPrefixesFromJSONPath loads static GS1 prefix→brand mappings.
+// Must be called after DeriveBarcodePrefixes so static entries override derived ones.
+func ImportPrefixesFromJSONPath(conn *sql.DB, path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read %s: %w", path, err)
+	}
+	var entries []staticPrefixEntry
+	if err := json.Unmarshal(data, &entries); err != nil {
+		return fmt.Errorf("parse %s: %w", path, err)
+	}
+	tx, err := conn.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	stmt, err := tx.Prepare(`INSERT OR REPLACE INTO barcode_prefixes (prefix, brand) VALUES (?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	for _, e := range entries {
+		if e.Prefix == "" || e.Brand == "" {
+			continue
+		}
+		if _, err := stmt.Exec(e.Prefix, e.Brand); err != nil {
+			return err
+		}
+	}
+	fmt.Printf("static prefixes: loaded %d entries from %s\n", len(entries), path)
 	return tx.Commit()
 }
