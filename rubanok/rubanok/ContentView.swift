@@ -3,11 +3,13 @@ import SwiftUI
 struct ContentView: View {
     @State private var query = ""
     @State private var results: [CompanyResult] = []
+    @State private var isScanning = false
+    @State private var scanErrorMessage: String?
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             VStack(spacing: 0) {
-                SearchBar(query: $query)
+                SearchBar(query: $query, onScanTap: { isScanning = true })
                     .padding(.horizontal)
                     .padding(.top)
 
@@ -17,6 +19,7 @@ struct ContentView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.top, 80)
                     }
+                    .scrollDismissesKeyboard(.immediately)
                     .refreshable { await refresh() }
                 } else if results.isEmpty {
                     ScrollView {
@@ -24,12 +27,14 @@ struct ContentView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.top, 80)
                     }
+                    .scrollDismissesKeyboard(.immediately)
                     .refreshable { await refresh() }
                 } else {
                     List(results, id: \.companyName) { result in
                         CompanyRow(result: result)
                     }
                     .listStyle(.plain)
+                    .scrollDismissesKeyboard(.immediately)
                     .refreshable { await refresh() }
                 }
             }
@@ -40,6 +45,34 @@ struct ContentView: View {
         }
         .onChange(of: query) {
             results = (try? DatabaseManager.shared.search(query: query)) ?? []
+        }
+        .sheet(isPresented: $isScanning) {
+            BarcodeScannerView { code in
+                isScanning = false
+                if let brand = DatabaseManager.shared.lookupBarcode(code) {
+                    query = brand
+                } else {
+                    query = ""
+                    scanErrorMessage = "Product not found — search manually"
+                    Task {
+                        try? await Task.sleep(for: .seconds(2.5))
+                        scanErrorMessage = nil
+                    }
+                }
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if let msg = scanErrorMessage {
+                Text(msg)
+                    .font(.subheadline)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(.regularMaterial)
+                    .clipShape(Capsule())
+                    .padding(.bottom, 20)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .animation(.easeInOut, value: scanErrorMessage)
+            }
         }
     }
 
@@ -68,6 +101,7 @@ struct ContentView: View {
 
 private struct SearchBar: View {
     @Binding var query: String
+    let onScanTap: () -> Void
 
     var body: some View {
         HStack {
@@ -85,6 +119,11 @@ private struct SearchBar: View {
                 }
                 .accessibilityLabel("Clear search")
             }
+            Button(action: onScanTap) {
+                Image(systemName: "barcode.viewfinder")
+                    .foregroundStyle(.secondary)
+            }
+            .accessibilityLabel("Scan barcode")
         }
         .padding(10)
         .background(Color(.secondarySystemBackground))
