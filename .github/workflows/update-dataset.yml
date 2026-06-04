@@ -4,9 +4,6 @@ on:
   schedule:
     - cron: "0 2 * * *"   # 2:00 AM UTC daily
   workflow_dispatch:        # allow manual trigger from GitHub UI
-  push:
-    branches: [main]
-    paths: [".github/workflows/update-dataset.yml"]
 
 concurrency:
   group: update-dataset
@@ -44,7 +41,6 @@ jobs:
 
       - name: Import WSRW (who-support-rus-war.com)
         run: ./pipeline-bin import wsrw
-        continue-on-error: true
 
       - name: Merge entities
         run: ./pipeline-bin merge --overrides data/overrides.json

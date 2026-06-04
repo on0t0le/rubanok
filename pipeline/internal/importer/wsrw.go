@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -32,9 +33,25 @@ type wsrwCompany struct {
 	} `json:"acf"`
 }
 
-// ImportFromWSRW fetches all companies from who-support-rus-war.com and stores them in raw_wsrw.
+const wsrwStaticFile = "data/wsrw-companies.json"
+
+// ImportFromWSRW imports companies from the static snapshot file if present,
+// falling back to live HTTP fetch from who-support-rus-war.com.
 func ImportFromWSRW(conn *sql.DB) error {
+	if data, err := os.ReadFile(wsrwStaticFile); err == nil {
+		fmt.Printf("WSRW: reading from %s\n", wsrwStaticFile)
+		return importFromWSRWData(conn, data)
+	}
+	fmt.Println("WSRW: static file not found, fetching live...")
 	return importFromWSRWURL(conn, wsrwBaseURL)
+}
+
+func importFromWSRWData(conn *sql.DB, data []byte) error {
+	var companies []wsrwCompany
+	if err := json.Unmarshal(data, &companies); err != nil {
+		return fmt.Errorf("parse WSRW data: %w", err)
+	}
+	return storeWSRWCompanies(conn, companies)
 }
 
 func importFromWSRWURL(conn *sql.DB, baseURL string) error {
@@ -42,7 +59,10 @@ func importFromWSRWURL(conn *sql.DB, baseURL string) error {
 	if err != nil {
 		return fmt.Errorf("fetch WSRW: %w", err)
 	}
+	return storeWSRWCompanies(conn, companies)
+}
 
+func storeWSRWCompanies(conn *sql.DB, companies []wsrwCompany) error {
 	tx, err := conn.Begin()
 	if err != nil {
 		return err
