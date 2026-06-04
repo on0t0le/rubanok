@@ -55,6 +55,10 @@ func CreateSchema(conn *sql.DB) error {
 			status TEXT,
 			brands TEXT
 		);
+		CREATE TABLE IF NOT EXISTS barcode_prefixes (
+			prefix TEXT PRIMARY KEY,
+			brand  TEXT NOT NULL
+		);
 		CREATE TABLE IF NOT EXISTS companies (
 			id            TEXT PRIMARY KEY,
 			name          TEXT NOT NULL,

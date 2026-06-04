@@ -41,6 +41,10 @@ final class DatabaseManager {
                 code  TEXT PRIMARY KEY,
                 brand TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS barcode_prefixes (
+                prefix TEXT PRIMARY KEY,
+                brand  TEXT NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS meta (
                 key   TEXT PRIMARY KEY,
                 value TEXT
@@ -185,9 +189,58 @@ final class DatabaseManager {
                                  -1, &stmt, nil) == SQLITE_OK else { return nil }
         defer { sqlite3_finalize(stmt) }
         bindText(stmt, 1, code)
+        if sqlite3_step(stmt) == SQLITE_ROW,
+           let ptr = sqlite3_column_text(stmt, 0) {
+            return String(cString: ptr)
+        }
+        return lookupBarcodeByPrefix(code)
+    }
+
+    private func lookupBarcodeByPrefix(_ code: String) -> String? {
+        let lengths = (4...9).compactMap { len -> String? in
+            guard code.count > len else { return nil }
+            return String(code.prefix(len))
+        }
+        guard !lengths.isEmpty else { return nil }
+        let placeholders = lengths.map { _ in "?" }.joined(separator: ",")
+        let sql = "SELECT brand FROM barcode_prefixes WHERE prefix IN (\(placeholders)) ORDER BY length(prefix) DESC LIMIT 1"
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
+        defer { sqlite3_finalize(stmt) }
+        for (i, prefix) in lengths.enumerated() {
+            bindText(stmt, Int32(i + 1), prefix)
+        }
         guard sqlite3_step(stmt) == SQLITE_ROW,
               let ptr = sqlite3_column_text(stmt, 0) else { return nil }
         return String(cString: ptr)
+    }
+
+    func importBarcodePrefixes(_ prefixes: [[String: String]]) throws {
+        try exec("BEGIN TRANSACTION")
+        do {
+            try exec("DELETE FROM barcode_prefixes")
+            let sql = "INSERT OR REPLACE INTO barcode_prefixes (prefix, brand) VALUES (?, ?)"
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                throw DBError.prepareFailed(errMsg())
+            }
+            defer { sqlite3_finalize(stmt) }
+            for entry in prefixes {
+                guard let prefix = entry["prefix"], let brand = entry["brand"],
+                      !prefix.isEmpty, !brand.isEmpty else { continue }
+                sqlite3_reset(stmt)
+                sqlite3_clear_bindings(stmt)
+                bindText(stmt, 1, prefix)
+                bindText(stmt, 2, brand)
+                guard sqlite3_step(stmt) == SQLITE_DONE else {
+                    throw DBError.stepFailed(errMsg())
+                }
+            }
+            try exec("COMMIT")
+        } catch {
+            try? exec("ROLLBACK")
+            throw error
+        }
     }
 
     // MARK: - Private helpers

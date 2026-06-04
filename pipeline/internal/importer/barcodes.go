@@ -38,7 +38,7 @@ func ImportBarcodesFromAllSources(conn *sql.DB) error {
 			return fmt.Errorf("%s: %w", src.label, err)
 		}
 	}
-	return nil
+	return DeriveBarcodePrefixes(conn)
 }
 
 // ImportBarcodesFromOpenFoodFacts imports barcodes from Open Food Facts only.

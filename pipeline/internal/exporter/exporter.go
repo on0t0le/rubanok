@@ -29,10 +29,17 @@ type BarcodeEntry struct {
 	Brand string `json:"brand"`
 }
 
+// BarcodePrefixEntry maps a GS1 manufacturer prefix to a brand name.
+type BarcodePrefixEntry struct {
+	Prefix string `json:"prefix"`
+	Brand  string `json:"brand"`
+}
+
 // Output is the top-level structure of companies.json.gz.
 type Output struct {
-	Companies []Company      `json:"companies"`
-	Barcodes  []BarcodeEntry `json:"barcodes"`
+	Companies       []Company            `json:"companies"`
+	Barcodes        []BarcodeEntry       `json:"barcodes"`
+	BarcodePrefixes []BarcodePrefixEntry `json:"barcode_prefixes"`
 }
 
 // Version is the structure of version.json.
@@ -52,12 +59,16 @@ func Export(conn *sql.DB, outputDir string) error {
 	if err != nil {
 		return fmt.Errorf("load barcodes: %w", err)
 	}
+	prefixes, err := loadBarcodePrefixes(conn)
+	if err != nil {
+		return fmt.Errorf("load barcode prefixes: %w", err)
+	}
 
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
 		return fmt.Errorf("mkdir %s: %w", outputDir, err)
 	}
 
-	if err := writeCompaniesGZ(companies, barcodes, filepath.Join(outputDir, "companies.json.gz")); err != nil {
+	if err := writeCompaniesGZ(companies, barcodes, prefixes, filepath.Join(outputDir, "companies.json.gz")); err != nil {
 		return fmt.Errorf("write companies.json.gz: %w", err)
 	}
 	if err := writeVersion(len(companies), filepath.Join(outputDir, "version.json")); err != nil {
@@ -141,10 +152,30 @@ func loadBarcodes(conn *sql.DB) ([]BarcodeEntry, error) {
 	return result, rows.Err()
 }
 
-func writeCompaniesGZ(companies []Company, barcodes []BarcodeEntry, path string) error {
-	out := Output{Companies: companies, Barcodes: barcodes}
+func loadBarcodePrefixes(conn *sql.DB) ([]BarcodePrefixEntry, error) {
+	rows, err := conn.Query(`SELECT prefix, brand FROM barcode_prefixes ORDER BY prefix`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []BarcodePrefixEntry
+	for rows.Next() {
+		var e BarcodePrefixEntry
+		if err := rows.Scan(&e.Prefix, &e.Brand); err != nil {
+			return nil, err
+		}
+		result = append(result, e)
+	}
+	return result, rows.Err()
+}
+
+func writeCompaniesGZ(companies []Company, barcodes []BarcodeEntry, prefixes []BarcodePrefixEntry, path string) error {
+	out := Output{Companies: companies, Barcodes: barcodes, BarcodePrefixes: prefixes}
 	if out.Barcodes == nil {
 		out.Barcodes = []BarcodeEntry{}
+	}
+	if out.BarcodePrefixes == nil {
+		out.BarcodePrefixes = []BarcodePrefixEntry{}
 	}
 	data, err := json.Marshal(out)
 	if err != nil {

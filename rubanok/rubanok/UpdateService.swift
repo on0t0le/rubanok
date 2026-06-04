@@ -79,6 +79,9 @@ final class UpdateService {
             if let barcodes = root["barcodes"] as? [[String: String]] {
                 try db.importBarcodes(barcodes)
             }
+            if let prefixes = root["barcode_prefixes"] as? [[String: String]] {
+                try db.importBarcodePrefixes(prefixes)
+            }
             UserDefaults.standard.set(manifest.version, forKey: AppConfig.versionKey)
             return .updated(records: companies.count)
         } catch {
