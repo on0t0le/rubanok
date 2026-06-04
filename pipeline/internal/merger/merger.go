@@ -69,6 +69,18 @@ func Merge(conn *sql.DB, overrides []Override) error {
 		return fmt.Errorf("load brands: %w", err)
 	}
 
+	// Pre-compute sorted trigram sets for all company norms once (avoids re-hashing in hot loops).
+	type normTrigrams struct {
+		norm   string
+		sorted string
+		tgrams map[string]bool
+	}
+	osTrigs := make([]normTrigrams, len(osList))
+	for i, e := range osList {
+		s := normalize.SortTokens(e.normName)
+		osTrigs[i] = normTrigrams{norm: e.normName, sorted: s, tgrams: normalize.Trigrams(s)}
+	}
+
 	// Collect all company norm names (OS + KSE) for fuzzy brand resolution.
 	allNorms := make([]string, 0, len(osList)+len(kseList))
 	for _, e := range osList {
@@ -121,11 +133,13 @@ func Merge(conn *sql.DB, overrides []Override) error {
 			continue
 		}
 
-		// fuzzy match against all OS entities
+		// fuzzy match against all OS entities (pre-computed trigrams avoid re-hashing)
+		kseSorted := normalize.SortTokens(normKSE)
+		kseTgrams := normalize.Trigrams(kseSorted)
 		bestScore := 0
 		var bestEntity *osEntity
-		for j := range osList {
-			score := normalize.TokenSortRatio(normKSE, osList[j].normName)
+		for j := range osTrigs {
+			score := normalize.SimilarityFromSets(kseTgrams, osTrigs[j].tgrams)
 			if score > bestScore {
 				bestScore = score
 				bestEntity = &osList[j]
@@ -245,6 +259,16 @@ func resolveBrands(pairs []brandPair, companyNorms []string) map[string][]string
 		normSet[n] = true
 	}
 
+	// Pre-compute trigrams for the static company norm list once.
+	type cnEntry struct {
+		norm   string
+		tgrams map[string]bool
+	}
+	cnTrigs := make([]cnEntry, len(companyNorms))
+	for i, cn := range companyNorms {
+		cnTrigs[i] = cnEntry{norm: cn, tgrams: normalize.Trigrams(normalize.SortTokens(cn))}
+	}
+
 	ownerToCompany := make(map[string]string)
 	for _, p := range pairs {
 		normOwner := normalize.Company(p.owner)
@@ -274,13 +298,15 @@ func resolveBrands(pairs []brandPair, companyNorms []string) map[string][]string
 				continue
 			}
 		}
+		ownerSorted := normalize.SortTokens(normOwner)
+		ownerTgrams := normalize.Trigrams(ownerSorted)
 		bestScore := 0
 		bestNorm := ""
-		for _, cn := range companyNorms {
-			score := normalize.TokenSortRatio(normOwner, cn)
+		for _, ce := range cnTrigs {
+			score := normalize.SimilarityFromSets(ownerTgrams, ce.tgrams)
 			if score > bestScore {
 				bestScore = score
-				bestNorm = cn
+				bestNorm = ce.norm
 			}
 		}
 		if bestScore >= 70 {

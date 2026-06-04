@@ -29,6 +29,19 @@ SELECT DISTINCT ?brandLabel ?ownerLabel WHERE {
 LIMIT 50000
 `
 
+// wikidataFoodBrandSPARQL catches food products (Q16323605) whose brand entity
+// has no English label. Goes product→P1716→brand entity→P127/P176→owner, using
+// the product item's label as the brand name.
+const wikidataFoodBrandSPARQL = `
+SELECT DISTINCT ?brandLabel ?ownerLabel WHERE {
+  ?brandEntity wdt:P31 wd:Q16323605 .
+  { ?brandEntity wdt:P127 ?owner . } UNION { ?brandEntity wdt:P176 ?owner . }
+  ?brand wdt:P1716 ?brandEntity .
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en" }
+}
+LIMIT 10000
+`
+
 
 var qidRE = regexp.MustCompile(`^Q\d+$`)
 
@@ -107,10 +120,17 @@ func FetchPersonNames(names []string) (map[string]bool, error) {
 
 // ImportBrandsFromWikidata fetches brand→company pairs from the Wikidata
 // SPARQL endpoint and inserts them into raw_brands with source "wikidata".
+// Runs two queries: typed brand entities and food brands via P1716 reverse lookup.
 func ImportBrandsFromWikidata(conn *sql.DB) error {
 	brands, err := queryWikidata(wikidataClient, wikidataSPARQL)
 	if err != nil {
 		return fmt.Errorf("wikidata query: %w", err)
+	}
+	foodBrands, err := queryWikidata(wikidataClient, wikidataFoodBrandSPARQL)
+	if err != nil {
+		fmt.Printf("WARN: wikidata food brand query: %v\n", err)
+	} else {
+		brands = append(brands, foodBrands...)
 	}
 	return insertWikidataBrands(conn, brands)
 }
