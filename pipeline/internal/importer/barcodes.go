@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 )
@@ -25,6 +26,10 @@ var barcodeSources = []struct{ label, url string }{
 // Open Beauty Facts, and Open Products Facts. The brand set is built once
 // and reused across all sources; duplicates are skipped (first source wins).
 func ImportBarcodesFromAllSources(conn *sql.DB) error {
+	if err := ImportBarcodesFromJSONPath(conn, "data/barcodes.json"); err != nil {
+		fmt.Printf("WARN: static barcodes: %v\n", err)
+	}
+
 	brandSet, err := buildBrandSet(conn)
 	if err != nil {
 		return fmt.Errorf("build brand set: %w", err)
@@ -146,6 +151,43 @@ func importBarcodesFromReader(conn *sql.DB, r io.Reader, brandSet map[string]str
 	}
 
 	fmt.Printf("%s: inserted %d barcode→brand pairs\n", label, inserted)
+	return tx.Commit()
+}
+
+type staticBarcodeEntry struct {
+	Code  string `json:"code"`
+	Brand string `json:"brand"`
+}
+
+// ImportBarcodesFromJSONPath loads a static barcode→brand mapping file.
+func ImportBarcodesFromJSONPath(conn *sql.DB, path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read %s: %w", path, err)
+	}
+	var entries []staticBarcodeEntry
+	if err := json.Unmarshal(data, &entries); err != nil {
+		return fmt.Errorf("parse %s: %w", path, err)
+	}
+	tx, err := conn.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	stmt, err := tx.Prepare(`INSERT OR REPLACE INTO raw_barcodes (code, brand) VALUES (?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	for _, e := range entries {
+		if e.Code == "" || e.Brand == "" {
+			continue
+		}
+		if _, err := stmt.Exec(e.Code, e.Brand); err != nil {
+			return err
+		}
+	}
+	fmt.Printf("static barcodes: loaded %d entries from %s\n", len(entries), path)
 	return tx.Commit()
 }
 
