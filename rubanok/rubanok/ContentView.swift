@@ -5,7 +5,7 @@ struct ContentView: View {
     @State private var results: [CompanyResult] = []
 
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
+        ZStack(alignment: .bottomTrailing) {
             VStack(spacing: 0) {
                 SearchBar(query: $query)
                     .padding(.horizontal)
@@ -35,7 +35,7 @@ struct ContentView: View {
             }
 
             DatasetVersionLabel()
-                .padding(.leading, 12)
+                .padding(.trailing, 12)
                 .padding(.bottom, 8)
         }
         .onChange(of: query) {
@@ -150,7 +150,9 @@ private struct DatasetVersionLabel: View {
         guard let raw = UserDefaults.standard.string(forKey: AppConfig.versionKey) else {
             return "no data"
         }
-        return String(raw.prefix(10))
+        // "2026-06-04T07:43:10Z" → "2026-06-04 07:43"
+        let trimmed = String(raw.prefix(16))
+        return trimmed.replacingOccurrences(of: "T", with: " ")
     }
 
     var body: some View {
