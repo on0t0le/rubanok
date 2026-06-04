@@ -40,7 +40,7 @@ jobs:
         run: ./pipeline-bin import brands
 
       - name: Import WSRW (who-support-rus-war.com)
-        run: ./pipeline-bin import wsrw
+        run: ./pipeline-bin import wsrw || echo "WARN: WSRW import failed, continuing without it"
 
       - name: Merge entities
         run: ./pipeline-bin merge --overrides data/overrides.json

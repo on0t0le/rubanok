@@ -89,7 +89,12 @@ func fetchAllWSRWCompanies(baseURL string) ([]wsrwCompany, error) {
 
 func fetchWSRWPage(baseURL string, page int) ([]wsrwCompany, int, error) {
 	url := fmt.Sprintf("%s?per_page=100&page=%d", baseURL, page)
-	resp, err := wsrwClient.Get(url)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, 0, fmt.Errorf("page %d: %w", page, err)
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; rubanok-pipeline/1.0; +https://github.com/on0t0le/rubanok)")
+	resp, err := wsrwClient.Do(req)
 	if err != nil {
 		return nil, 0, fmt.Errorf("page %d: %w", page, err)
 	}
