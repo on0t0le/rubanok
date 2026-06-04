@@ -188,14 +188,21 @@ func Merge(conn *sql.DB, overrides []Override) error {
 		russiaStatus := "Unknown"
 		sourcesSlice := []string{"OpenSanctions"}
 
-		if k, matched := kseMatched[e.normName]; matched {
-			russiaStatus = k.status
+		kse, hasKSE := kseMatched[e.normName]
+		if hasKSE {
+			russiaStatus = kse.status
 			sourcesSlice = append(sourcesSlice, "KSE")
 		}
 
 		brandsSlice := brands[e.normName]
 		if brandsSlice == nil {
 			brandsSlice = []string{}
+		}
+
+		// Skip OS-only entries with no consumer brands — defence/finance/military
+		// entities not useful for brand checking.
+		if !hasKSE && len(brandsSlice) == 0 {
+			continue
 		}
 
 		id := slugify(e.name)
