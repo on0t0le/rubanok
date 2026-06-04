@@ -45,6 +45,10 @@ func CreateSchema(conn *sql.DB) error {
 			source       TEXT,
 			UNIQUE(brand_name, company_name)
 		);
+		CREATE TABLE IF NOT EXISTS raw_barcodes (
+			code  TEXT PRIMARY KEY,
+			brand TEXT NOT NULL
+		);
 		CREATE TABLE IF NOT EXISTS companies (
 			id            TEXT PRIMARY KEY,
 			name          TEXT NOT NULL,
